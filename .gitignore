@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Audio Files
+*.wav
+*.mp3
+*.m4a
