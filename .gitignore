@@ -35,3 +35,6 @@ go.work.sum
 *.wav
 *.mp3
 *.m4a
+
+# My Notes
+Notes.txt

@@ -1,3 +1,2 @@
 UI Anpassung für STT: Titel, Logo
 Start nächster Prozess
-Dockerfile für Build
