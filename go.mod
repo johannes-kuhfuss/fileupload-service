@@ -54,13 +54,10 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdoutlog v0.18.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.42.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.42.0
-	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/arch v0.25.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
