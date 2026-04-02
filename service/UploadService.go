@@ -37,7 +37,7 @@ func (s DefaultUploadService) Upload(fd dto.FileDta) (newFilePath string, writte
 	return path.Join(fd.FileId.String(), fd.Header.Filename), bw, nil
 }
 
-func buildFileName(uploadPath string, fileId string, fileName string) string {
+func buildFileName(uploadPath, fileId, fileName string) string {
 	os.MkdirAll(path.Join(uploadPath, fileId), os.ModePerm)
 	return path.Join(uploadPath, fileId, fileName)
 }
