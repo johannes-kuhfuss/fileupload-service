@@ -1,0 +1,38 @@
+{{ define "uploadlist.page.tmpl" }}
+
+{{ template "header" .}}
+
+   <div class="container-fluid">
+        <div class="row">
+            <div class="col">
+                <h1>Simple File Upload</h1>
+                <h2>Files uploaded</h2>
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                          <th scope="col">Upload Date</th>
+                          <th scope="col">Name</th>
+                          <th scope="col">File Size</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">New Path</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .data }}
+                        <tr>
+                          <td>{{ .UploadDate }}</td>
+                          <td>{{ .FileName }}</td>
+                          <td>{{ .Size }}</td>
+                          <td>{{ .Status }}</td>
+                          <td>{{ .NewFilePath }}</td>
+                        </tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+{{ template "footer" .}}
+
+{{ end }}

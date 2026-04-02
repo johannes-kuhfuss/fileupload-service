@@ -1,0 +1,57 @@
+{{ define "footer" }}
+
+    <footer class="text-center text-lg-start bg-dark text-muted">
+        <div class="row py-md-2">
+            <div class="col px-md-3">
+            &copy; Johannes Kuhfuss, 2023
+            </div>
+
+            <div class="col">
+            </div>
+
+            <div class="col">
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
+    {{block "js" .}}
+
+    {{end}}
+
+    <script>
+      async function submitForm(button_id) {
+         
+        const formData = new FormData();
+        const statusField = document.getElementById("status");
+        const file = document.getElementById("file");
+        
+        formData.append("file", file.files[0]);
+
+        statusField.value = "Starting upload...";
+        
+        let response; 
+        try {
+          response = await fetch("./upload", {
+            method: "POST",
+            body: formData,
+          });
+        } catch (error) {
+          statusField.value = "Upload error: " + error;
+        }
+
+        if (response?.ok) {
+          statusField.value = "Upload completed.";
+        } else {
+          let st = response?.statusText
+          let json = await response.json();
+          statusField.value = "Upload error: " + st +": " + json.message;
+        }
+      }
+    </script>
+
+    </body>
+
+    </html>
+{{ end }}
