@@ -9,7 +9,7 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
 )
 
-type UploadService interface {
+type Uploader interface {
 	Upload(dto.FileDta)
 }
 
