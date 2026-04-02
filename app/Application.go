@@ -101,6 +101,7 @@ func initRouter() {
 	router.SetTrustedProxies(nil)
 	globPath := filepath.Join(cfg.Gin.TemplatePath, "*.tmpl")
 	router.LoadHTMLGlob(globPath)
+	router.Static("/bootstrap", "./bootstrap")
 
 	cfg.RunTime.Router = router
 }
