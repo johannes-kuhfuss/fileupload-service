@@ -41,15 +41,15 @@ var (
 )
 
 func StartApp() {
-	//logger.Info("Starting application...")
+	setupOtel()
+	cfg.RunTime.OLog.Info("Starting application...")
 
 	getCmdLine()
 	err := config.InitConfig(config.EnvFile, &cfg)
 	if err != nil {
 		panic(err)
 	}
-	setupOtel()
-	cfg.RunTime.OLog.Info("Starting application...")
+
 	initRouter()
 	initServer()
 	wireApp()
@@ -62,10 +62,8 @@ func StartApp() {
 	cleanUp()
 
 	if srvErr := server.Shutdown(ctx); srvErr != nil {
-		//logger.Error("Graceful shutdown failed", srvErr)
 		cfg.RunTime.OLog.Error("Graceful shutdown failed", slog.String("error", srvErr.Error()))
 	} else {
-		//logger.Info("Graceful shutdown finished")
 		cfg.RunTime.OLog.Error("Graceful shutdown finished")
 	}
 }
@@ -97,7 +95,6 @@ func setupOtel() {
 
 func initRouter() {
 	gin.SetMode(cfg.Gin.Mode)
-	//gin.DefaultWriter = logger.GetLogger()
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(otelgin.Middleware(oTelName))
@@ -164,27 +161,23 @@ func RegisterForOsSignals() {
 func createSanitizers() {
 	sani, err := sanitize.New()
 	if err != nil {
-		//logger.Error("Error creating sanitizer", err)
-		cfg.RunTime.OLog.Error("Error creating sanitizer", slog.String("error", err.Error()))
+		cfg.RunTime.OLog.Error("Error creating sanitizer", slog.String("Error Message", err.Error()))
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
 }
 
 func startServer() {
-	//logger.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
 	cfg.RunTime.OLog.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
 	cfg.RunTime.StartDate = date.GetNowUtc()
 	if cfg.Server.UseTls {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
-			//logger.Error("Error while starting https server", err)
-			cfg.RunTime.OLog.Error("Error while starting https server", slog.String("error", err.Error()))
+			cfg.RunTime.OLog.Error("Error while starting https server", slog.String("Error Message", err.Error()))
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			//logger.Error("Error while starting http server", err)
-			cfg.RunTime.OLog.Error("Error while starting http server", slog.String("error", err.Error()))
+			cfg.RunTime.OLog.Error("Error while starting http server", slog.String("Error Message", err.Error()))
 			panic(err)
 		}
 	}
@@ -195,10 +188,8 @@ func cleanUp() {
 	ctx, cancel = context.WithTimeout(context.Background(), shutdownTime)
 	defer cancel()
 	defer func() {
-		//logger.Info("Cleaning up")
 		cfg.RunTime.OLog.Info("Cleaning up")
 		otelShutdown(ctx)
-		//logger.Info("Done cleaning up")
 		cancel()
 	}()
 }

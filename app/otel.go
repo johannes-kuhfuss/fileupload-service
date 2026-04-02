@@ -22,17 +22,12 @@ var (
 	res *resource.Resource
 )
 
-// setupOTelSDK bootstraps the OpenTelemetry pipeline.
-// If it does not return an error, make sure to call shutdown for proper cleanup.
 func setupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
 	res, err = resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName("FileUploadService")))
 
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, fn := range shutdownFuncs {
@@ -42,16 +37,13 @@ func setupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 		return err
 	}
 
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
 	handleErr := func(inErr error) {
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
-	// Set up propagator.
 	prop := newPropagator()
 	otel.SetTextMapPropagator(prop)
 
-	// Set up trace provider.
 	tracerProvider, err := newTracerProvider()
 	if err != nil {
 		handleErr(err)
@@ -60,7 +52,6 @@ func setupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	// Set up meter provider.
 	meterProvider, err := newMeterProvider()
 	if err != nil {
 		handleErr(err)
@@ -69,7 +60,6 @@ func setupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
 
-	// Set up logger provider.
 	loggerProvider, err := newLoggerProvider()
 	if err != nil {
 		handleErr(err)
@@ -96,8 +86,7 @@ func newTracerProvider() (*trace.TracerProvider, error) {
 
 	tracerProvider := trace.NewTracerProvider(
 		trace.WithBatcher(traceExporter,
-			// Default is 5s. Set to 1s for demonstrative purposes.
-			trace.WithBatchTimeout(time.Second)),
+			trace.WithBatchTimeout(5*time.Second)),
 		trace.WithResource(res),
 	)
 	return tracerProvider, nil
@@ -111,8 +100,7 @@ func newMeterProvider() (*metric.MeterProvider, error) {
 
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-			// Default is 1m. Set to 3s for demonstrative purposes.
-			metric.WithInterval(3*time.Second))),
+			metric.WithInterval(10*time.Second))),
 		metric.WithResource(res),
 	)
 	return meterProvider, nil
