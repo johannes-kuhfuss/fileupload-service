@@ -1,2 +1,2 @@
 # fileupload-service
-Simpel File Upload
+Simple File Upload
