@@ -60,12 +60,8 @@ func InitConfig(file string, config *AppConfig) error {
 	if err != nil {
 		return fmt.Errorf("Could not initalize configuration. Check your environment variables. %v", err.Error())
 	}
-	setDefaults(config)
 	logger.Info("Configuration initialized")
 	return nil
-}
-
-func setDefaults(config *AppConfig) {
 }
 
 func loadConfig(file string) error {
