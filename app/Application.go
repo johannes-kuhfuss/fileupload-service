@@ -193,6 +193,7 @@ func startServer() {
 func cleanUp() {
 	shutdownTime := time.Duration(cfg.Server.GracefulShutdownTime) * time.Second
 	ctx, cancel = context.WithTimeout(context.Background(), shutdownTime)
+	defer cancel()
 	defer func() {
 		//logger.Info("Cleaning up")
 		cfg.RunTime.OLog.Info("Cleaning up")
