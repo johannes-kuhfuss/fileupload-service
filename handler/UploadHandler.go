@@ -69,17 +69,6 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("Upload request %v, File: %v", fd.FileId.String(), fd.Header.Filename))
 
-	err = uh.Cfg.RunTime.Sani.Sanitize(&fd)
-	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := "Date and/or time information missing"
-		helper.AddToUploadList(uh.Cfg, fd, msg, "")
-		uh.Cfg.RunTime.OLog.Warn(msg)
-		apiErr := api_error.NewBadRequestError(msg)
-		c.JSON(apiErr.StatusCode(), apiErr)
-		return
-	}
-
 	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("request %v metadata.", fd.FileId.String()))
 
 	newFilePath, written, err := uh.Svc.Upload(fd)
