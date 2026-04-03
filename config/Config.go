@@ -29,7 +29,7 @@ type AppConfig struct {
 		TemplatePath string `envconfig:"TEMPLATE_PATH" default:"./templates/"`
 	}
 	Upload struct {
-		Path              string   `envconfig:"UPLOAD_PATH" default:"./uploads"`
+		Path              string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP"`
 		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav"`
 	}
 	RunTime struct {
