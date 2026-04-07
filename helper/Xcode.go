@@ -10,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/johannes-kuhfuss/fileupload-service/config"
+	"github.com/johannes-kuhfuss/services_utils/logger"
 )
 
 type XcodeRequest struct {
@@ -20,8 +21,11 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	var (
 		req XcodeRequest
 	)
+	logger.Info("Starting to call xcode service")
 	if cfg.Xcode.Host == "" {
-		cfg.RunTime.OLog.Error("No Xcode host configured. Cannot start XCode")
+		msg := "No Xcode host configured. Cannot start XCode"
+		logger.Error(msg, nil)
+		cfg.RunTime.OLog.Error(msg)
 		return
 	}
 	xcodeUrl := url.URL{
@@ -32,14 +36,20 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	req.SourceFilePath = filePath
 	reqJson, err := json.Marshal(req)
 	if err != nil {
-		cfg.RunTime.OLog.Error("Could not create transcode request", slog.String("Error Message", err.Error()))
+		msg := "Could not create transcode request"
+		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		return
 	}
 	resp, err := http.Post(xcodeUrl.String(), "application/json", bytes.NewBuffer(reqJson))
 	if err != nil {
-		cfg.RunTime.OLog.Error("Could not send transcode request", slog.String("Error Message", err.Error()))
+		msg := "Could not send transcode request"
+		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		return
 	}
 	defer resp.Body.Close()
-	cfg.RunTime.OLog.Info(fmt.Sprintf("Transcode request response Status: %v", resp.Status))
+	msg := fmt.Sprintf("Transcode request response Status: %v", resp.Status)
+	logger.Info(msg)
+	cfg.RunTime.OLog.Info(msg)
 }
