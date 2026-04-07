@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"path/filepath"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/helper"
 	"github.com/johannes-kuhfuss/fileupload-service/service"
 	"github.com/johannes-kuhfuss/services_utils/api_error"
+	"github.com/johannes-kuhfuss/services_utils/logger"
 	"github.com/johannes-kuhfuss/services_utils/misc"
 )
 
@@ -35,13 +35,13 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	fd.FileId = uuid.New()
 
-	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("Upload request %v received.", fd.FileId.String()))
+	logger.Info(fmt.Sprintf("Upload request %v received.", fd.FileId.String()))
 
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := "error getting form"
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		logger.Error(msg, err)
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -50,7 +50,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := "cannot read remote file"
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		logger.Error(msg, err)
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -61,15 +61,15 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := fmt.Sprintf("Cannot upload file with extension %v", filepath.Ext(fd.Header.Filename))
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
-		uh.Cfg.RunTime.OLog.Warn(msg)
+		logger.Warn(msg)
 		apiErr := api_error.NewBadRequestError(msg)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
 	}
 
-	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("Upload request %v, File: %v", fd.FileId.String(), fd.Header.Filename))
+	logger.Info(fmt.Sprintf("Upload request %v, File: %v", fd.FileId.String(), fd.Header.Filename))
 
-	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("request %v metadata.", fd.FileId.String()))
+	logger.Info(fmt.Sprintf("request %v metadata.", fd.FileId.String()))
 
 	newFilePath, written, err := uh.Svc.Upload(fd)
 	fd.FileSize = written
@@ -77,13 +77,13 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := "Could not complete the upload"
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		logger.Error(msg, err)
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
 	}
 	helper.AddToUploadList(uh.Cfg, fd, "Successfully completed", newFilePath)
-	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("Upload request %v (file: %v) sucessfully completed.", fd.FileId.String(), fd.Header.Filename))
+	logger.Info(fmt.Sprintf("Upload request %v (file: %v) sucessfully completed.", fd.FileId.String(), fd.Header.Filename))
 	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Copy().Request.Context(), 1)
 	helper.StartXcode(uh.Cfg, newFilePath)
 

@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sanitize/sanitize"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
+	"github.com/johannes-kuhfuss/services_utils/logger"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"go.opentelemetry.io/otel/metric"
@@ -44,7 +44,6 @@ type AppConfig struct {
 		UploadList []domain.Upload
 		OTrace     trace.Tracer
 		OMeter     metric.Meter
-		OLog       *slog.Logger
 	}
 	Metrics struct {
 		UploadSuccessCounter metric.Int64Counter
@@ -57,20 +56,20 @@ var (
 )
 
 func InitConfig(file string, config *AppConfig) error {
-	config.RunTime.OLog.Info(fmt.Sprintf("Initalizing configuration from file %v...", file))
+	logger.Info(fmt.Sprintf("Initalizing configuration from file %v...", file))
 	loadConfig(file)
 	err := envconfig.Process("", config)
 	if err != nil {
 		return fmt.Errorf("Could not initalize configuration. Check your environment variables. %v", err.Error())
 	}
-	config.RunTime.OLog.Info("Configuration initialized")
+	logger.Info("Configuration initialized")
 	return nil
 }
 
 func loadConfig(file string) error {
 	err := godotenv.Load(file)
 	if err != nil {
-		fmt.Println("Could not open env file. Using Environment variable and defaults")
+		logger.Warn("Could not open env file. Using Environment variable and defaults")
 		return err
 	}
 	return nil

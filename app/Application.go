@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,7 +20,6 @@ import (
 	"github.com/johannes-kuhfuss/services_utils/date"
 	"github.com/johannes-kuhfuss/services_utils/logger"
 
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -43,7 +41,6 @@ var (
 
 func StartApp() {
 	setupOtel()
-	cfg.RunTime.OLog.Info("Starting application...")
 	logger.Info("Starting application...")
 
 	getCmdLine()
@@ -64,9 +61,9 @@ func StartApp() {
 	cleanUp()
 
 	if srvErr := server.Shutdown(ctx); srvErr != nil {
-		cfg.RunTime.OLog.Error("Graceful shutdown failed", slog.String("error", srvErr.Error()))
+		logger.Error("Graceful shutdown failed", err)
 	} else {
-		cfg.RunTime.OLog.Error("Graceful shutdown finished")
+		logger.Error("Graceful shutdown finished", err)
 	}
 }
 
@@ -85,7 +82,6 @@ func setupOtel() {
 	}
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
-	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)
 
 	cfg.Metrics.UploadSuccessCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadsuccess.counter",
 		metric.WithDescription("Number of Successful Uploads"),
@@ -164,23 +160,23 @@ func RegisterForOsSignals() {
 func createSanitizers() {
 	sani, err := sanitize.New()
 	if err != nil {
-		cfg.RunTime.OLog.Error("Error creating sanitizer", slog.String("Error Message", err.Error()))
+		logger.Error("Error creating sanitizer", err)
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
 }
 
 func startServer() {
-	cfg.RunTime.OLog.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
+	logger.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
 	cfg.RunTime.StartDate = date.GetNowUtc()
 	if cfg.Server.UseTls {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
-			cfg.RunTime.OLog.Error("Error while starting https server", slog.String("Error Message", err.Error()))
+			logger.Error("Error while starting https server", err)
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			cfg.RunTime.OLog.Error("Error while starting http server", slog.String("Error Message", err.Error()))
+			logger.Error("Error while starting http server", err)
 			panic(err)
 		}
 	}
@@ -191,8 +187,9 @@ func cleanUp() {
 	ctx, cancel = context.WithTimeout(context.Background(), shutdownTime)
 	defer cancel()
 	defer func() {
-		cfg.RunTime.OLog.Info("Cleaning up")
+		logger.Info("Cleaning up...")
 		otelShutdown(ctx)
 		cancel()
 	}()
+	logger.Info("Ending.")
 }
