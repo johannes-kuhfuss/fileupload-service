@@ -85,6 +85,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	helper.AddToUploadList(uh.Cfg, fd, "Successfully completed", newFilePath)
 	uh.Cfg.RunTime.OLog.Info(fmt.Sprintf("Upload request %v (file: %v) sucessfully completed.", fd.FileId.String(), fd.Header.Filename))
 	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Copy().Request.Context(), 1)
+	helper.StartXcode(uh.Cfg, newFilePath)
 
 	ret := dto.FileRet{
 		FileName:     fd.Header.Filename,
