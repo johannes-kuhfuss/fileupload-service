@@ -32,6 +32,10 @@ type AppConfig struct {
 		Path              string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP"`
 		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav"`
 	}
+	Xcode struct {
+		Host string `envconfig:"XCODE_HOST"`
+		Port string `envconfig:"XCODE_PORT" default:"8080"`
+	}
 	RunTime struct {
 		Router     *gin.Engine
 		ListenAddr string
