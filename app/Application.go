@@ -22,8 +22,6 @@ import (
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
 )
 
 const oTelName = "fileupload-service"
@@ -81,16 +79,18 @@ func setupOtel() {
 	if err != nil {
 		fmt.Println("Otel setup went wrong")
 	}
-	cfg.RunTime.OTrace = otel.Tracer(oTelName)
-	cfg.RunTime.OMeter = otel.Meter(oTelName)
+	//cfg.RunTime.OTrace = otel.Tracer(oTelName)
+	//cfg.RunTime.OMeter = otel.Meter(oTelName)
 	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)
 
-	cfg.Metrics.UploadSuccessCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadsuccess.counter",
-		metric.WithDescription("Number of Successful Uploads"),
-		metric.WithUnit("{count}"))
-	cfg.Metrics.UploadFailureCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadfailure.counter",
-		metric.WithDescription("Number of Failed Uploads"),
-		metric.WithUnit("{count}"))
+	/*
+		cfg.Metrics.UploadSuccessCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadsuccess.counter",
+			metric.WithDescription("Number of Successful Uploads"),
+			metric.WithUnit("{count}"))
+		cfg.Metrics.UploadFailureCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadfailure.counter",
+			metric.WithDescription("Number of Failed Uploads"),
+			metric.WithUnit("{count}"))
+	*/
 }
 
 func initRouter() {
