@@ -50,11 +50,12 @@ func sanitizeFileName(fileName string) string {
 	var (
 		newName      string
 		invalidChars = regexp.MustCompile(`[<>:"/\\|?*;\[\]\x00-\x1F]`)
+		spaces       = regexp.MustCompile("s+")
 	)
 	newName = strings.TrimSpace(fileName)
 	newName = invalidChars.ReplaceAllString(newName, "_")
 	newName = strings.TrimRight(newName, ".")
-	newName = strings.ReplaceAll(newName, " ", "_")
+	newName = spaces.ReplaceAllString(newName, "")
 
 	return newName
 }
