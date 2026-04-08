@@ -86,7 +86,8 @@ func setupOtel() {
 	defer stop()
 	otelShutdown, err = setupOTelSDK(ctx)
 	if err != nil {
-		fmt.Println("Otel setup went wrong")
+		logger.Error("Otel setup went wrong", err)
+		return
 	}
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
