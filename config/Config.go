@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ type AppConfig struct {
 		UploadList []domain.Upload
 		OTrace     trace.Tracer
 		OMeter     metric.Meter
+		OLog       *slog.Logger
 	}
 	Metrics struct {
 		UploadSuccessCounter metric.Int64Counter

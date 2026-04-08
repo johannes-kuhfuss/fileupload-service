@@ -26,7 +26,7 @@ func setupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
-	res, err = resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName("FileUploadService")))
+	res, err = resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceName(oTelName)))
 
 	shutdown := func(ctx context.Context) error {
 		var err error

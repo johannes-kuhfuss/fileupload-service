@@ -20,6 +20,7 @@ import (
 	"github.com/johannes-kuhfuss/services_utils/date"
 	"github.com/johannes-kuhfuss/services_utils/logger"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -41,7 +42,8 @@ var (
 
 func StartApp() {
 	setupOtel()
-	logger.Info("Starting application...")
+	msg := "Starting application..."
+	logger.Info(msg)
 
 	getCmdLine()
 	err := config.InitConfig(config.EnvFile, &cfg)
@@ -60,10 +62,10 @@ func StartApp() {
 	<-appEnd
 	cleanUp()
 
-	if srvErr := server.Shutdown(ctx); srvErr != nil {
+	if server.Shutdown(ctx) != nil {
 		logger.Error("Graceful shutdown failed", err)
 	} else {
-		logger.Error("Graceful shutdown finished", err)
+		logger.Info("Graceful shutdown finished")
 	}
 }
 
@@ -82,6 +84,7 @@ func setupOtel() {
 	}
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
+	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)
 
 	cfg.Metrics.UploadSuccessCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadsuccess.counter",
 		metric.WithDescription("Number of Successful Uploads"),
@@ -189,7 +192,6 @@ func cleanUp() {
 	defer func() {
 		logger.Info("Cleaning up...")
 		otelShutdown(ctx)
-		cancel()
 	}()
 	logger.Info("Ending.")
 }
