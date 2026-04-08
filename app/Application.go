@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -44,6 +45,7 @@ func StartApp() {
 	setupOtel()
 	msg := "Starting application..."
 	logger.Info(msg)
+	cfg.RunTime.OLog.Info(msg)
 
 	getCmdLine()
 	err := config.InitConfig(config.EnvFile, &cfg)
@@ -62,10 +64,14 @@ func StartApp() {
 	<-appEnd
 	cleanUp()
 
-	if server.Shutdown(ctx) != nil {
-		logger.Error("Graceful shutdown failed", err)
+	if err := server.Shutdown(ctx); err != nil {
+		msg := "Graceful shutdown failed"
+		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 	} else {
-		logger.Info("Graceful shutdown finished")
+		msg := "Graceful shutdown finished"
+		logger.Info(msg)
+		cfg.RunTime.OLog.Info(msg)
 	}
 }
 
@@ -163,23 +169,31 @@ func RegisterForOsSignals() {
 func createSanitizers() {
 	sani, err := sanitize.New()
 	if err != nil {
-		logger.Error("Error creating sanitizer", err)
+		msg := "Error creating sanitizer"
+		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
 }
 
 func startServer() {
-	logger.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
+	msg := fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr)
+	logger.Info(msg)
+	cfg.RunTime.OLog.Info(msg)
 	cfg.RunTime.StartDate = date.GetNowUtc()
 	if cfg.Server.UseTls {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
-			logger.Error("Error while starting https server", err)
+			msg := "Error while starting https server"
+			logger.Error(msg, err)
+			cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("Error while starting http server", err)
+			msg := "Error while starting http server"
+			logger.Error(msg, err)
+			cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 			panic(err)
 		}
 	}
@@ -190,8 +204,9 @@ func cleanUp() {
 	ctx, cancel = context.WithTimeout(context.Background(), shutdownTime)
 	defer cancel()
 	defer func() {
-		logger.Info("Cleaning up...")
+		msg := "Cleaning up..."
+		logger.Info(msg)
+		cfg.RunTime.OLog.Info(msg)
 		otelShutdown(ctx)
 	}()
-	logger.Info("Ending.")
 }
