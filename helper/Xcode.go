@@ -3,7 +3,6 @@ package helper
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,9 +12,6 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/services_utils/logger"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type XcodeRequest struct {
@@ -32,18 +28,8 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		Host:   net.JoinHostPort(cfg.Xcode.Host, cfg.Xcode.Port),
 		Path:   "/xcode",
 	}
-	ctx := cfg.RunTime.Ctx
-	tracer := otel.Tracer("http-client")
-	ctx, span := tracer.Start(ctx, "http_request",
-		trace.WithAttributes(
-			attribute.String("http.url", xcodeUrl.String()),
-		),
-	)
-	defer span.End()
-
 	if cfg.Xcode.Host == "" {
 		msg := "No Xcode host configured. Cannot start XCode"
-		span.RecordError(errors.New(msg))
 		logger.Error(msg, nil)
 		cfg.RunTime.OLog.Error(msg)
 		return
@@ -55,18 +41,16 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
-		span.RecordError(err)
 		return
 	}
 	hc := http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
-	hreq, err := http.NewRequestWithContext(ctx, "POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
+	hreq, err := http.NewRequest("POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
-		span.RecordError(err)
 		return
 	}
 	hreq.Header.Add("Content-Type", "application/json")
@@ -75,7 +59,6 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		msg := "Could not send transcode request"
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
-		span.RecordError(err)
 		return
 	}
 	defer resp.Body.Close()
