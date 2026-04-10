@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,6 +45,7 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		msg := "No Xcode host configured. Cannot start XCode"
 		span.RecordError(errors.New(msg))
 		logger.Error(msg, nil)
+		cfg.RunTime.OLog.Error(msg)
 		return
 	}
 
@@ -51,8 +53,9 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	reqJson, err := json.Marshal(req)
 	if err != nil {
 		msg := "Could not create transcode request"
-		span.RecordError(err)
 		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		span.RecordError(err)
 		return
 	}
 	hc := http.Client{
@@ -62,6 +65,7 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		span.RecordError(err)
 		return
 	}
@@ -70,6 +74,7 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	if err != nil {
 		msg := "Could not send transcode request"
 		logger.Error(msg, err)
+		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		span.RecordError(err)
 		return
 	}
