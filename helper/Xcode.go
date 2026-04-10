@@ -10,6 +10,7 @@ import (
 
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/services_utils/logger"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type XcodeRequest struct {
@@ -38,7 +39,10 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		logger.Error(msg, err)
 		return
 	}
-	resp, err := http.Post(xcodeUrl.String(), "application/json", bytes.NewBuffer(reqJson))
+	hc := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+	resp, err := hc.Post(xcodeUrl.String(), "application/json", bytes.NewBuffer(reqJson))
 	if err != nil {
 		msg := "Could not send transcode request"
 		logger.Error(msg, err)
