@@ -36,14 +36,14 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	fd.FileId = uuid.New()
 
-	msg := fmt.Sprintf("Upload request %v for file %v received .", fd.FileId.String(), fd.Header.Filename)
+	msg := fmt.Sprintf("Upload request %v received.", fd.FileId.String())
 	logger.Info(msg)
 	uh.Cfg.RunTime.OLog.Info(msg)
 
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := fmt.Sprintf("error getting form for request %v, file %v", fd.FileId.String(), fd.Header.Filename)
+		msg := fmt.Sprintf("error getting form for request %v", fd.FileId.String())
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
@@ -53,7 +53,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	fd.File, fd.Header, err = c.Request.FormFile("file")
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := fmt.Sprintf("cannot read remote file fo%v for request %v", fd.Header.Filename, fd.FileId.String())
+		msg := fmt.Sprintf("cannot read remote file %v for request %v", fd.Header.Filename, fd.FileId.String())
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
