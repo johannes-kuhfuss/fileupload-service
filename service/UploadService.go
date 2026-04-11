@@ -26,7 +26,6 @@ func NewUploadService(cfg *config.AppConfig) DefaultUploadService {
 }
 
 func (s DefaultUploadService) Upload(fd dto.FileDta) (newFilePath string, written int64, err error) {
-
 	fileName := sanitizeFileName(fd.Header.Filename)
 	localFile := buildFileName(s.Cfg.Upload.UploadPath, fd.FileId.String(), fileName)
 	dst, err := os.Create(localFile)

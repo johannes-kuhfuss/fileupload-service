@@ -1,5 +1,5 @@
 # Build container
-FROM golang:1.26.1-alpine
+FROM golang:1.26.2-alpine
 RUN apk -U upgrade --no-cache && apk add --no-cache git && rm -rf /var/cache/apk/* && mkdir /build
 WORKDIR /build
 RUN git clone https://github.com/johannes-kuhfuss/fileupload-service.git

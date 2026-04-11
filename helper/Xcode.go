@@ -26,7 +26,9 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 	var (
 		req XcodeRequest
 	)
-	logger.Info("Starting to call xcode service")
+	msg := "Calling transcode service..."
+	logger.Info(msg)
+	cfg.RunTime.OLog.Info(msg)
 	xcodeUrl := url.URL{
 		Scheme: "http",
 		Host:   net.JoinHostPort(cfg.Xcode.Host, cfg.Xcode.Port),
@@ -80,6 +82,7 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		return
 	}
 	defer resp.Body.Close()
-	msg := fmt.Sprintf("Transcode request response Status: %v", resp.Status)
+	msg = fmt.Sprintf("Transcode request response Status: %v", resp.Status)
 	logger.Info(msg)
+	cfg.RunTime.OLog.Info(msg)
 }

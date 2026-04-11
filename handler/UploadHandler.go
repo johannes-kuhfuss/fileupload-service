@@ -36,14 +36,14 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	fd.FileId = uuid.New()
 
-	msg := fmt.Sprintf("Upload request %v received.", fd.FileId.String())
+	msg := fmt.Sprintf("Upload request %v for file %v received .", fd.FileId.String(), fd.Header.Filename)
 	logger.Info(msg)
 	uh.Cfg.RunTime.OLog.Info(msg)
 
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := "error getting form"
+		msg := fmt.Sprintf("error getting form for request %v, file %v", fd.FileId.String(), fd.Header.Filename)
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
@@ -53,7 +53,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	fd.File, fd.Header, err = c.Request.FormFile("file")
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := "cannot read remote file"
+		msg := fmt.Sprintf("cannot read remote file fo%v for request %v", fd.Header.Filename, fd.FileId.String())
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
@@ -64,7 +64,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	if !misc.SliceContainsString(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fd.Header.Filename)) {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := fmt.Sprintf("Cannot upload file with extension %v", filepath.Ext(fd.Header.Filename))
+		msg := fmt.Sprintf("Cannot upload file %v with extension %v", fd.Header.Filename, filepath.Ext(fd.Header.Filename))
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Warn(msg)
 		uh.Cfg.RunTime.OLog.Warn(msg)
@@ -72,16 +72,11 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
 	}
-
-	msg = fmt.Sprintf("Upload request %v, File: %v", fd.FileId.String(), fd.Header.Filename)
-	logger.Info(msg)
-	uh.Cfg.RunTime.OLog.Info(msg)
-
 	newFilePath, written, err := uh.Svc.Upload(fd)
 	fd.FileSize = written
 	if err != nil {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
-		msg := "Could not complete the upload"
+		msg := fmt.Sprintf("Could not complete the upload request %v for file %v", fd.FileId.String(), fd.Header.Filename)
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
@@ -90,7 +85,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		return
 	}
 	helper.AddToUploadList(uh.Cfg, fd, "Successfully completed", newFilePath)
-	msg = fmt.Sprintf("Upload request %v (file: %v) sucessfully completed.", fd.FileId.String(), fd.Header.Filename)
+	msg = fmt.Sprintf("Upload request %v for file %v sucessfully completed.", fd.FileId.String(), fd.Header.Filename)
 	logger.Info(msg)
 	uh.Cfg.RunTime.OLog.Info(msg)
 	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Copy().Request.Context(), 1)
