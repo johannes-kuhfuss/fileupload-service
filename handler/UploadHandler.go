@@ -17,6 +17,10 @@ import (
 	"github.com/johannes-kuhfuss/services_utils/misc"
 )
 
+const (
+	eMsg = "Error Message"
+)
+
 type UploadHandler struct {
 	Svc service.DefaultUploadService
 	Cfg *config.AppConfig
@@ -45,7 +49,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := fmt.Sprintf("error getting form for request %v", fd.FileId.String())
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		uh.Cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -55,7 +59,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Copy().Request.Context(), 1)
 		msg := fmt.Sprintf("cannot read remote file %v for request %v", fd.Header.Filename, fd.FileId.String())
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		uh.Cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -79,7 +83,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		msg := fmt.Sprintf("Could not complete the upload request %v for file %v", fd.FileId.String(), fd.Header.Filename)
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		uh.Cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return

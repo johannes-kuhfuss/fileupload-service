@@ -18,6 +18,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const (
+	eMsg = "Error Message"
+)
+
 type XcodeRequest struct {
 	SourceFilePath string `json:"source_file_path"`
 }
@@ -57,7 +61,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return
 	}
@@ -68,7 +72,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return
 	}
@@ -77,7 +81,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 	if err != nil {
 		msg := "Could not send transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return
 	}

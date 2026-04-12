@@ -27,7 +27,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-const oTelName = "fileupload-service"
+const (
+	oTelName = "fileupload-service"
+	eMsg     = "Error Message"
+)
 
 var (
 	cfg           config.AppConfig
@@ -67,7 +70,7 @@ func StartApp() {
 	if err := server.Shutdown(ctx); err != nil {
 		msg := "Graceful shutdown failed"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 	} else {
 		msg := "Graceful shutdown finished"
 		logger.Info(msg)
@@ -172,7 +175,7 @@ func createSanitizers() {
 	if err != nil {
 		msg := "Error creating sanitizer"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
@@ -187,14 +190,14 @@ func startServer() {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
 			msg := "Error while starting https server"
 			logger.Error(msg, err)
-			cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+			cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			msg := "Error while starting http server"
 			logger.Error(msg, err)
-			cfg.RunTime.OLog.Error(msg, slog.String("Error Message", err.Error()))
+			cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	}
