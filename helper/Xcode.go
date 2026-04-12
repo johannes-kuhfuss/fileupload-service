@@ -22,7 +22,7 @@ type XcodeRequest struct {
 	SourceFilePath string `json:"source_file_path"`
 }
 
-func StartXcode(cfg *config.AppConfig, filePath string) {
+func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 	var (
 		req XcodeRequest
 	)
@@ -40,7 +40,7 @@ func StartXcode(cfg *config.AppConfig, filePath string) {
 		cfg.RunTime.OLog.Error(msg)
 		return
 	}
-	stc := trace.SpanContextFromContext(cfg.RunTime.Ctx)
+	stc := trace.SpanContextFromContext(ictx)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ctx = trace.ContextWithRemoteSpanContext(ctx, stc)

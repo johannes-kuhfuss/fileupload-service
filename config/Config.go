@@ -1,7 +1,6 @@
 package config
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -47,7 +46,6 @@ type AppConfig struct {
 		OTrace     trace.Tracer
 		OMeter     metric.Meter
 		OLog       *slog.Logger
-		Ctx        context.Context
 	}
 	Metrics struct {
 		UploadSuccessCounter metric.Int64Counter

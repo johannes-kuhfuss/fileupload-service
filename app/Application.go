@@ -89,7 +89,6 @@ func setupOtel() {
 		logger.Error("Otel setup went wrong", err)
 		return
 	}
-	cfg.RunTime.Ctx = ctx
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
 	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)

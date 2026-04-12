@@ -89,7 +89,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	logger.Info(msg)
 	uh.Cfg.RunTime.OLog.Info(msg)
 	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Copy().Request.Context(), 1)
-	helper.StartXcode(uh.Cfg, newFilePath)
+	helper.StartXcode(uh.Cfg, c.Request.Context(), newFilePath)
 
 	ret := dto.FileRet{
 		FileName:     fd.Header.Filename,
