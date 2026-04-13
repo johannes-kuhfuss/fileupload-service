@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/services_utils/logger"
@@ -46,12 +45,14 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 		cfg.RunTime.OLog.Error(msg)
 		return errors.New(msg)
 	}
-	stc := trace.SpanContextFromContext(ictx)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	ctx = trace.ContextWithRemoteSpanContext(ctx, stc)
+	/*
+		stc := trace.SpanContextFromContext(ictx)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ctx = trace.ContextWithRemoteSpanContext(ctx, stc)
+	*/
 	tracer := otel.Tracer("fileupload-service")
-	ctx, span := tracer.Start(ctx, "transcode_request",
+	ictx, span := tracer.Start(ictx, "transcode_request",
 		trace.WithAttributes(
 			attribute.String("http.url", xcodeUrl.String()),
 		),
@@ -70,7 +71,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 	hc := http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
-	hreq, err := http.NewRequestWithContext(ctx, "POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
+	hreq, err := http.NewRequestWithContext(ictx, "POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
