@@ -27,13 +27,13 @@ type XcodeRequest struct {
 	SourceFilePath string `json:"source_file_path"`
 }
 
-func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) error {
+func StartXcode(cfg *config.AppConfig, ctx context.Context, filePath string) error {
 	var (
 		req XcodeRequest
 	)
 	msg := "Calling transcode service..."
 	logger.Info(msg)
-	cfg.RunTime.OLog.Info(msg)
+	cfg.RunTime.OLog.InfoContext(ctx, msg)
 	xcodeUrl := url.URL{
 		Scheme: "http",
 		Host:   net.JoinHostPort(cfg.Xcode.Host, cfg.Xcode.Port),
@@ -42,11 +42,11 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 	if cfg.Xcode.Host == "" {
 		msg := "No Xcode host configured. Cannot start XCode"
 		logger.Error(msg, nil)
-		cfg.RunTime.OLog.Error(msg)
+		cfg.RunTime.OLog.ErrorContext(ctx, msg)
 		return errors.New(msg)
 	}
 	tracer := otel.Tracer("fileupload-service")
-	ictx, span := tracer.Start(ictx, "transcode_request",
+	ctx, span := tracer.Start(ctx, "transcode_request",
 		trace.WithAttributes(
 			attribute.String("http.url", xcodeUrl.String()),
 		),
@@ -58,18 +58,18 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
+		cfg.RunTime.OLog.ErrorContext(ctx, msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return err
 	}
 	hc := http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
-	hreq, err := http.NewRequestWithContext(ictx, "POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
+	hreq, err := http.NewRequestWithContext(ctx, "POST", xcodeUrl.String(), bytes.NewBuffer(reqJson))
 	if err != nil {
 		msg := "Could not create transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
+		cfg.RunTime.OLog.ErrorContext(ctx, msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return err
 	}
@@ -78,13 +78,13 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 	if err != nil {
 		msg := "Could not send transcode request"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
+		cfg.RunTime.OLog.ErrorContext(ctx, msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
 		return err
 	}
 	defer resp.Body.Close()
 	msg = fmt.Sprintf("Transcode request response Status: %v", resp.Status)
 	logger.Info(msg)
-	cfg.RunTime.OLog.Info(msg)
+	cfg.RunTime.OLog.InfoContext(ctx, msg)
 	return nil
 }
