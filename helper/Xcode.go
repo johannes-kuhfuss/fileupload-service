@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/services_utils/logger"
@@ -45,7 +46,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 		return
 	}
 	stc := trace.SpanContextFromContext(ictx)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = trace.ContextWithRemoteSpanContext(ctx, stc)
 	tracer := otel.Tracer("fileupload-service")
