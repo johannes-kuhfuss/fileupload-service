@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -27,7 +28,7 @@ type XcodeRequest struct {
 	SourceFilePath string `json:"source_file_path"`
 }
 
-func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
+func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) error {
 	var (
 		req XcodeRequest
 	)
@@ -43,7 +44,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 		msg := "No Xcode host configured. Cannot start XCode"
 		logger.Error(msg, nil)
 		cfg.RunTime.OLog.Error(msg)
-		return
+		return errors.New(msg)
 	}
 	stc := trace.SpanContextFromContext(ictx)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -64,7 +65,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
-		return
+		return err
 	}
 	hc := http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
@@ -75,7 +76,7 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
-		return
+		return err
 	}
 	hreq.Header.Add("Content-Type", "application/json")
 	resp, err := hc.Do(hreq)
@@ -84,10 +85,11 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) {
 		logger.Error(msg, err)
 		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		span.RecordError(err)
-		return
+		return err
 	}
 	defer resp.Body.Close()
 	msg = fmt.Sprintf("Transcode request response Status: %v", resp.Status)
 	logger.Info(msg)
 	cfg.RunTime.OLog.Info(msg)
+	return nil
 }
