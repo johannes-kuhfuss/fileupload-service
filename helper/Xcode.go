@@ -45,12 +45,6 @@ func StartXcode(cfg *config.AppConfig, ictx context.Context, filePath string) er
 		cfg.RunTime.OLog.Error(msg)
 		return errors.New(msg)
 	}
-	/*
-		stc := trace.SpanContextFromContext(ictx)
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		ctx = trace.ContextWithRemoteSpanContext(ctx, stc)
-	*/
 	tracer := otel.Tracer("fileupload-service")
 	ictx, span := tracer.Start(ictx, "transcode_request",
 		trace.WithAttributes(
