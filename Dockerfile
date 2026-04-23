@@ -6,7 +6,7 @@ RUN git clone https://github.com/johannes-kuhfuss/fileupload-service.git
 WORKDIR /build/fileupload-service
 RUN go build -o /build/fileupload-service/fileupload-service /build/fileupload-service/main.go
 # Run container
-FROM alpine:3.23.3
+FROM alpine:3.23.4
 RUN apk -U upgrade --no-cache && rm -rf /var/cache/apk/* && mkdir /app
 WORKDIR /app
 COPY --from=0 /build/fileupload-service/fileupload-service /app/fileupload-service
