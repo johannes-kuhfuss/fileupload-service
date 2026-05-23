@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/johannes-kuhfuss/services_utils/api_error"
 	"github.com/johannes-kuhfuss/services_utils/logger"
 	"github.com/johannes-kuhfuss/services_utils/misc"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -47,7 +49,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("error getting form for request %v", fd.FileId.String())
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.ErrorContext(c.Request.Context(), msg, slog.String(eMsg, err.Error()))
@@ -57,7 +59,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	}
 	fd.File, fd.Header, err = c.Request.FormFile("file")
 	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("cannot read remote file for request %v", fd.FileId.String())
 		logger.Error(msg, err)
 		uh.Cfg.RunTime.OLog.ErrorContext(c.Request.Context(), msg, slog.String(eMsg, err.Error()))
@@ -68,7 +70,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	defer fd.File.Close()
 
 	if !misc.SliceContainsString(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fd.Header.Filename)) {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("Cannot upload file %v with extension %v", fd.Header.Filename, filepath.Ext(fd.Header.Filename))
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Warn(msg)
@@ -80,7 +82,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	newFilePath, uploadID, written, err := uh.Svc.Upload(c.Request.Context(), fd)
 	fd.FileSize = written
 	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("Could not complete the upload request %v for file %v", fd.FileId.String(), fd.Header.Filename)
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Error(msg, err)
@@ -93,7 +95,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	msg = fmt.Sprintf("Upload request %v for file %v sucessfully completed.", fd.FileId.String(), fd.Header.Filename)
 	logger.Info(msg)
 	uh.Cfg.RunTime.OLog.InfoContext(c.Request.Context(), msg)
-	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Copy().Request.Context(), 1)
+	addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadSuccessCounter)
 
 	ret := dto.FileRet{
 		FileName:     fd.Header.Filename,
@@ -151,7 +153,7 @@ func (uh UploadHandler) UploadChunk(c *gin.Context) {
 
 	bytesReceived, err := uh.Svc.WriteChunk(uploadID, offset, c.Request.Body)
 	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		apiErr := api_error.NewBadRequestError(err.Error())
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -174,12 +176,12 @@ func (uh UploadHandler) GetUpload(c *gin.Context) {
 func (uh UploadHandler) CompleteUpload(c *gin.Context) {
 	session, err := uh.Svc.CompleteSession(c.Request.Context(), c.Param("uploadID"))
 	if err != nil {
-		uh.Cfg.Metrics.UploadFailureCounter.Add(c.Request.Context(), 1)
+		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		apiErr := api_error.NewBadRequestError(err.Error())
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
 	}
-	uh.Cfg.Metrics.UploadSuccessCounter.Add(c.Request.Context(), 1)
+	addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadSuccessCounter)
 	c.JSON(http.StatusOK, dto.CompleteUploadResponse{
 		UploadID:       session.UploadID,
 		FileName:       session.FileName,
@@ -202,5 +204,11 @@ func sessionResponse(session domain.UploadSession) dto.UploadSessionResponse {
 		BytesReceived:  session.BytesReceived,
 		Status:         session.Status,
 		QuarantinePath: session.QuarantinePath,
+	}
+}
+
+func addMetric(ctx context.Context, counter metric.Int64Counter) {
+	if counter != nil {
+		counter.Add(ctx, 1)
 	}
 }

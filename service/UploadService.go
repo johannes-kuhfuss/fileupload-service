@@ -131,11 +131,17 @@ func (s DefaultUploadService) WriteChunk(uploadID string, offset int64, body io.
 	}
 	reader := body
 	if session.FileSize > 0 {
-		reader = io.LimitReader(body, remaining)
+		reader = io.LimitReader(body, remaining+1)
 	}
 	written, err := io.Copy(dst, reader)
 	if err != nil {
 		return session.BytesReceived, err
+	}
+	if session.FileSize > 0 && written > remaining {
+		if err := dst.Truncate(session.FileSize); err != nil {
+			return session.BytesReceived, err
+		}
+		return session.BytesReceived, fmt.Errorf("chunk exceeds remaining upload size")
 	}
 
 	session.BytesReceived += written
