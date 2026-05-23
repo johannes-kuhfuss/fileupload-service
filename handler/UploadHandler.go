@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"slices"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -16,7 +17,6 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/service"
 	"github.com/johannes-kuhfuss/services_utils/api_error"
 	"github.com/johannes-kuhfuss/services_utils/logger"
-	"github.com/johannes-kuhfuss/services_utils/misc"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -69,7 +69,7 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	}
 	defer fd.File.Close()
 
-	if !misc.SliceContainsString(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fd.Header.Filename)) {
+	if !slices.Contains(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fd.Header.Filename)) {
 		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("Cannot upload file %v with extension %v", fd.Header.Filename, filepath.Ext(fd.Header.Filename))
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
@@ -193,7 +193,7 @@ func (uh UploadHandler) CompleteUpload(c *gin.Context) {
 }
 
 func (uh UploadHandler) allowedExtension(fileName string) bool {
-	return misc.SliceContainsString(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fileName))
+	return slices.Contains(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fileName))
 }
 
 func sessionResponse(session domain.UploadSession) dto.UploadSessionResponse {

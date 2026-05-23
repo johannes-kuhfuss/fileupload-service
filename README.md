@@ -34,7 +34,7 @@ curl -X POST http://localhost:8080/uploads/{upload_id}/complete
 ```
 
 Uploaded bytes are stored under `QUARANTINE_PATH` while the event outbox records
-what later malware scanning, metadata extraction, transcoding, and catalog
+what later malware scanning, metadata extraction, rendition, and catalog
 services should consume. In production this outbox boundary should be connected
 to the platform message broker, for example Kafka, NATS, RabbitMQ, or a cloud
 event bus.
@@ -49,5 +49,4 @@ event bus.
 - SERVER_READ_TIMEOUT_SECONDS: Request body read timeout. Defaults to `1800`.
 - SERVER_WRITE_TIMEOUT_SECONDS: Response write timeout. Defaults to `1800`.
 - SERVER_IDLE_TIMEOUT_SECONDS: Idle connection timeout. Defaults to `120`.
-- XCODE_HOST: legacy direct transcode-service host. The upload flow now emits events instead of calling it synchronously.
 - OTEL_EXPORTER_OTLP_ENDPOINT: endpoint to send OTEL data to, e.g. "<http://192.168.1.100:4317/>"

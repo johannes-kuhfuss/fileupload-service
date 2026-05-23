@@ -42,10 +42,6 @@ type AppConfig struct {
 		OutboxPath string `envconfig:"EVENT_OUTBOX_PATH"`
 		Source     string `envconfig:"EVENT_SOURCE" default:"fileupload-service"`
 	}
-	Xcode struct {
-		Host string `envconfig:"XCODE_HOST"`
-		Port string `envconfig:"XCODE_PORT" default:"8080"`
-	}
 	RunTime struct {
 		Router     *gin.Engine
 		ListenAddr string
