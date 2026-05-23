@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -43,14 +44,15 @@ type AppConfig struct {
 		Source     string `envconfig:"EVENT_SOURCE" default:"fileupload-service"`
 	}
 	RunTime struct {
-		Router     *gin.Engine
-		ListenAddr string
-		StartDate  time.Time
-		Sani       *sanitize.Sanitizer
-		UploadList []domain.Upload
-		OTrace     trace.Tracer
-		OMeter     metric.Meter
-		OLog       *slog.Logger
+		Router      *gin.Engine
+		ListenAddr  string
+		StartDate   time.Time
+		Sani        *sanitize.Sanitizer
+		UploadList  []domain.Upload
+		OTrace      trace.Tracer
+		OMeter      metric.Meter
+		OLog        *slog.Logger
+		OTelEnabled bool
 	}
 	Metrics struct {
 		UploadSuccessCounter metric.Int64Counter
@@ -63,6 +65,9 @@ var (
 )
 
 func InitConfig(file string, config *AppConfig) error {
+	if config.RunTime.OLog == nil {
+		config.RunTime.OLog = slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
 	msg := fmt.Sprintf("Initalizing configuration from file %v...", file)
 	logger.Info(msg)
 	config.RunTime.OLog.Info(msg)

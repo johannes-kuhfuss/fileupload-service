@@ -49,4 +49,4 @@ event bus.
 - SERVER_READ_TIMEOUT_SECONDS: Request body read timeout. Defaults to `1800`.
 - SERVER_WRITE_TIMEOUT_SECONDS: Response write timeout. Defaults to `1800`.
 - SERVER_IDLE_TIMEOUT_SECONDS: Idle connection timeout. Defaults to `120`.
-- OTEL_EXPORTER_OTLP_ENDPOINT: endpoint to send OTEL data to, e.g. "<http://192.168.1.100:4317/>"
+- OTEL_EXPORTER_OTLP_ENDPOINT: Optional endpoint to send OTEL data to, e.g. "<http://192.168.1.100:4317/>". If unset, OpenTelemetry is disabled and regular logging is used.

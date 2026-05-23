@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,7 +46,7 @@ var (
 )
 
 func StartApp() {
-	setupOtel()
+	ensureRuntimeLogger()
 	msg := "Starting application..."
 	logger.Info(msg)
 	cfg.RunTime.OLog.Info(msg)
@@ -55,6 +56,7 @@ func StartApp() {
 	if err != nil {
 		panic(err)
 	}
+	setupOtel()
 
 	initRouter()
 	initServer()
@@ -85,13 +87,25 @@ func getCmdLine() {
 
 func setupOtel() {
 	var err error
+	ensureRuntimeLogger()
+	otelShutdown = func(context.Context) error { return nil }
+	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) == "" {
+		msg := "OTEL_EXPORTER_OTLP_ENDPOINT is not set. OpenTelemetry is disabled."
+		logger.Info(msg)
+		cfg.RunTime.OLog.Info(msg)
+		cfg.RunTime.OTelEnabled = false
+		return
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	otelShutdown, err = setupOTelSDK(ctx)
 	if err != nil {
 		logger.Error("Otel setup went wrong", err)
+		cfg.RunTime.OTelEnabled = false
 		return
 	}
+	cfg.RunTime.OTelEnabled = true
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
 	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)
@@ -108,7 +122,9 @@ func initRouter() {
 	gin.SetMode(cfg.Gin.Mode)
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(otelgin.Middleware(oTelName))
+	if cfg.RunTime.OTelEnabled {
+		router.Use(otelgin.Middleware(oTelName))
+	}
 	router.SetTrustedProxies(nil)
 	globPath := filepath.Join(cfg.Gin.TemplatePath, "*.tmpl")
 	router.LoadHTMLGlob(globPath)
@@ -215,6 +231,14 @@ func cleanUp() {
 		msg := "Cleaning up..."
 		logger.Info(msg)
 		cfg.RunTime.OLog.Info(msg)
-		otelShutdown(ctx)
+		if otelShutdown != nil {
+			otelShutdown(ctx)
+		}
 	}()
+}
+
+func ensureRuntimeLogger() {
+	if cfg.RunTime.OLog == nil {
+		cfg.RunTime.OLog = slog.Default()
+	}
 }
