@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,7 +49,6 @@ type AppConfig struct {
 		UploadList  []domain.Upload
 		OTrace      trace.Tracer
 		OMeter      metric.Meter
-		OLog        *slog.Logger
 		OTelEnabled bool
 	}
 	Metrics struct {
@@ -65,12 +62,8 @@ var (
 )
 
 func InitConfig(file string, config *AppConfig) error {
-	if config.RunTime.OLog == nil {
-		config.RunTime.OLog = slog.New(slog.NewTextHandler(os.Stderr, nil))
-	}
 	msg := fmt.Sprintf("Initalizing configuration from file %v...", file)
 	logger.Info(msg)
-	config.RunTime.OLog.Info(msg)
 	loadConfig(file)
 	err := envconfig.Process("", config)
 	if err != nil {
@@ -78,7 +71,6 @@ func InitConfig(file string, config *AppConfig) error {
 	}
 	msg = "Configuration initialized"
 	logger.Info(msg)
-	config.RunTime.OLog.Info(msg)
 	return nil
 }
 

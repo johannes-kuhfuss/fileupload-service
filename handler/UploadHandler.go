@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -45,14 +44,12 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 
 	msg := fmt.Sprintf("Upload request %v received.", fd.FileId.String())
 	logger.Info(msg)
-	uh.Cfg.RunTime.OLog.InfoContext(c.Request.Context(), msg)
 
 	err := c.Request.ParseMultipartForm(32 << 20)
 	if err != nil {
 		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("error getting form for request %v", fd.FileId.String())
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.ErrorContext(c.Request.Context(), msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -62,7 +59,6 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
 		msg := fmt.Sprintf("cannot read remote file for request %v", fd.FileId.String())
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.ErrorContext(c.Request.Context(), msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -74,7 +70,6 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		msg := fmt.Sprintf("Cannot upload file %v with extension %v", fd.Header.Filename, filepath.Ext(fd.Header.Filename))
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Warn(msg)
-		uh.Cfg.RunTime.OLog.WarnContext(c.Request.Context(), msg)
 		apiErr := api_error.NewBadRequestError(msg)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -86,7 +81,6 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 		msg := fmt.Sprintf("Could not complete the upload request %v for file %v", fd.FileId.String(), fd.Header.Filename)
 		helper.AddToUploadList(uh.Cfg, fd, msg, "")
 		logger.Error(msg, err)
-		uh.Cfg.RunTime.OLog.ErrorContext(c.Request.Context(), msg, slog.String(eMsg, err.Error()))
 		apiErr := api_error.NewInternalServerError(msg, err)
 		c.JSON(apiErr.StatusCode(), apiErr)
 		return
@@ -94,7 +88,6 @@ func (uh UploadHandler) Receive(c *gin.Context) {
 	helper.AddToUploadList(uh.Cfg, fd, "Successfully completed", newFilePath)
 	msg = fmt.Sprintf("Upload request %v for file %v sucessfully completed.", fd.FileId.String(), fd.Header.Filename)
 	logger.Info(msg)
-	uh.Cfg.RunTime.OLog.InfoContext(c.Request.Context(), msg)
 	addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadSuccessCounter)
 
 	ret := dto.FileRet{

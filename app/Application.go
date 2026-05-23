@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,7 +21,6 @@ import (
 	"github.com/johannes-kuhfuss/services_utils/date"
 	"github.com/johannes-kuhfuss/services_utils/logger"
 
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -46,10 +44,8 @@ var (
 )
 
 func StartApp() {
-	ensureRuntimeLogger()
 	msg := "Starting application..."
 	logger.Info(msg)
-	cfg.RunTime.OLog.Info(msg)
 
 	getCmdLine()
 	err := config.InitConfig(config.EnvFile, &cfg)
@@ -72,11 +68,9 @@ func StartApp() {
 	if err := server.Shutdown(ctx); err != nil {
 		msg := "Graceful shutdown failed"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 	} else {
 		msg := "Graceful shutdown finished"
 		logger.Info(msg)
-		cfg.RunTime.OLog.Info(msg)
 	}
 }
 
@@ -87,12 +81,10 @@ func getCmdLine() {
 
 func setupOtel() {
 	var err error
-	ensureRuntimeLogger()
 	otelShutdown = func(context.Context) error { return nil }
 	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) == "" {
 		msg := "OTEL_EXPORTER_OTLP_ENDPOINT is not set. OpenTelemetry is disabled."
 		logger.Info(msg)
-		cfg.RunTime.OLog.Info(msg)
 		cfg.RunTime.OTelEnabled = false
 		return
 	}
@@ -108,7 +100,6 @@ func setupOtel() {
 	cfg.RunTime.OTelEnabled = true
 	cfg.RunTime.OTrace = otel.Tracer(oTelName)
 	cfg.RunTime.OMeter = otel.Meter(oTelName)
-	cfg.RunTime.OLog = otelslog.NewLogger(oTelName)
 
 	cfg.Metrics.UploadSuccessCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadsuccess.counter",
 		metric.WithDescription("Number of Successful Uploads"),
@@ -195,7 +186,6 @@ func createSanitizers() {
 	if err != nil {
 		msg := "Error creating sanitizer"
 		logger.Error(msg, err)
-		cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
@@ -204,20 +194,17 @@ func createSanitizers() {
 func startServer() {
 	msg := fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr)
 	logger.Info(msg)
-	cfg.RunTime.OLog.Info(msg)
 	cfg.RunTime.StartDate = date.GetNowUtc()
 	if cfg.Server.UseTls {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
 			msg := "Error while starting https server"
 			logger.Error(msg, err)
-			cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			msg := "Error while starting http server"
 			logger.Error(msg, err)
-			cfg.RunTime.OLog.Error(msg, slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	}
@@ -230,15 +217,8 @@ func cleanUp() {
 	defer func() {
 		msg := "Cleaning up..."
 		logger.Info(msg)
-		cfg.RunTime.OLog.Info(msg)
 		if otelShutdown != nil {
 			otelShutdown(ctx)
 		}
 	}()
-}
-
-func ensureRuntimeLogger() {
-	if cfg.RunTime.OLog == nil {
-		cfg.RunTime.OLog = slog.Default()
-	}
 }

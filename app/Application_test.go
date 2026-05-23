@@ -16,9 +16,6 @@ func TestSetupOtelDisablesTelemetryWhenEndpointIsMissing(t *testing.T) {
 	if cfg.RunTime.OTelEnabled {
 		t.Fatal("OTelEnabled = true, want false")
 	}
-	if cfg.RunTime.OLog == nil {
-		t.Fatal("OLog is nil, want regular logger")
-	}
 	if cfg.Metrics.UploadSuccessCounter != nil || cfg.Metrics.UploadFailureCounter != nil {
 		t.Fatal("metrics counters initialized while OTEL is disabled")
 	}

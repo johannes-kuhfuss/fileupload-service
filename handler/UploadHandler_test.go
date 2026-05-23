@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -192,7 +191,6 @@ func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	cfg.Upload.AllowedExtensions = []string{".wav", ".mp3", ".m4a"}
 	cfg.Events.Source = "test"
 	cfg.Events.OutboxPath = filepath.Join(root, "events", "upload-events.ndjson")
-	cfg.RunTime.OLog = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	svc := service.NewUploadService(&cfg)
 	handler := NewUploadHandler(&cfg, svc)
