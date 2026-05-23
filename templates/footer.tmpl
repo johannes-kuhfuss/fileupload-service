@@ -20,37 +20,6 @@
 
     {{end}}
 
-    <script>
-      async function submitForm(button_id) {
-         
-        const formData = new FormData();
-        const statusField = document.getElementById("status");
-        const file = document.getElementById("file");
-        
-        formData.append("file", file.files[0]);
-
-        statusField.value = "Starting upload...";
-        
-        let response; 
-        try {
-          response = await fetch("./upload", {
-            method: "POST",
-            body: formData,
-          });
-        } catch (error) {
-          statusField.value = "Upload error: " + error;
-        }
-
-        if (response?.ok) {
-          statusField.value = "Upload completed.";
-        } else {
-          let st = response?.statusText
-          let json = await response.json();
-          statusField.value = "Upload error: " + st +": " + json.message;
-        }
-      }
-    </script>
-
     </body>
 
     </html>

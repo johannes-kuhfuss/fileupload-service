@@ -2,31 +2,206 @@
 
 {{ template "header" .}}
 
-   <div class="container">
+   <div class="container py-4">
         <div class="row">
-            <div class="col">
-                <h1>Speech-to-Text</h1>
+            <div class="col col-lg-8">
+                <h1>Media Upload</h1>
                 <h2>Select file to upload</h2>
-                <p>
-                  <form id="upload-form" action="" method="POST" enctype="multipart/form-data" onsubmit="return false">
-                    <label for="file">Choose a file:</label>
-                    <input type="file" id="file" name="file" class="form-control-file" required>
-                    <br /><br />
-                    <input type="submit" id="upload" value="Upload" onclick="submitForm(this.id)" />
-                  </form>
-                </p>
+                <form id="upload-form" action="" method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Choose a file</label>
+                        <input type="file" id="file" name="file" class="form-control" required>
+                    </div>
+                    <button type="submit" id="upload" class="btn btn-primary">Upload</button>
+                </form>
             </div>
         </div>
     </div>
     <div class="container">
         <div class="row">
-            <div class="col">
+            <div class="col col-lg-8">
+                <div class="progress mb-3" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100">
+                    <div id="progress-bar" class="progress-bar" style="width: 0%">0%</div>
+                </div>
                 <div class="form-outline">
                     <input class="form-control" id="status" type="text" aria-label="readonly input" readonly /><br/>
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+      const chunkSize = 5 * 1024 * 1024;
+      const form = document.getElementById("upload-form");
+      const fileInput = document.getElementById("file");
+      const uploadButton = document.getElementById("upload");
+      const statusField = document.getElementById("status");
+      const progressBar = document.getElementById("progress-bar");
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const file = fileInput.files[0];
+        if (!file) {
+          setStatus("Select a file first.");
+          return;
+        }
+
+        uploadButton.disabled = true;
+        setProgress(0);
+        setStatus("Preparing upload...");
+
+        try {
+          const session = await getOrCreateUploadSession(file);
+          let offset = session.bytes_received || 0;
+          setProgress(percent(offset, file.size));
+
+          while (offset < file.size) {
+            const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
+            offset = await uploadChunk(session.upload_id, offset, chunk);
+            setProgress(percent(offset, file.size));
+            setStatus(`Uploading ${formatBytes(offset)} of ${formatBytes(file.size)}...`);
+          }
+
+          const completed = await completeUpload(session.upload_id);
+          clearSavedSession(file);
+          setProgress(100);
+          setStatus(`Upload completed: ${completed.quarantine_path}`);
+        } catch (error) {
+          setStatus(`Upload error: ${error.message}`);
+        } finally {
+          uploadButton.disabled = false;
+        }
+      });
+
+      async function getOrCreateUploadSession(file) {
+        const saved = loadSavedSession(file);
+        if (saved?.upload_id) {
+          const response = await fetch(`/uploads/${saved.upload_id}`);
+          if (response.ok) {
+            const session = await response.json();
+            if (session.status === "receiving") {
+              setStatus(`Resuming upload at ${formatBytes(session.bytes_received)}...`);
+              return session;
+            }
+          }
+          clearSavedSession(file);
+        }
+
+        const response = await fetch("/uploads", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            file_name: file.name,
+            file_size: file.size,
+            content_type: file.type,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await errorMessage(response));
+        }
+
+        const session = await response.json();
+        saveSession(file, session);
+        return session;
+      }
+
+      async function uploadChunk(uploadId, offset, chunk) {
+        const response = await fetch(`/uploads/${uploadId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Upload-Offset": String(offset),
+          },
+          body: chunk,
+        });
+
+        if (!response.ok) {
+          throw new Error(await errorMessage(response));
+        }
+
+        return Number(response.headers.get("Upload-Offset"));
+      }
+
+      async function completeUpload(uploadId) {
+        const response = await fetch(`/uploads/${uploadId}/complete`, {
+          method: "POST",
+        });
+
+        if (!response.ok) {
+          throw new Error(await errorMessage(response));
+        }
+
+        return response.json();
+      }
+
+      function saveSession(file, session) {
+        localStorage.setItem(sessionKey(file), JSON.stringify({
+          upload_id: session.upload_id,
+        }));
+      }
+
+      function loadSavedSession(file) {
+        const raw = localStorage.getItem(sessionKey(file));
+        if (!raw) {
+          return null;
+        }
+
+        try {
+          return JSON.parse(raw);
+        } catch {
+          clearSavedSession(file);
+          return null;
+        }
+      }
+
+      function clearSavedSession(file) {
+        localStorage.removeItem(sessionKey(file));
+      }
+
+      function sessionKey(file) {
+        return `fileupload:${file.name}:${file.size}:${file.lastModified}`;
+      }
+
+      async function errorMessage(response) {
+        try {
+          const body = await response.json();
+          return body.message || body.error || response.statusText;
+        } catch {
+          return response.statusText;
+        }
+      }
+
+      function setStatus(message) {
+        statusField.value = message;
+      }
+
+      function setProgress(value) {
+        progressBar.style.width = `${value}%`;
+        progressBar.textContent = `${value}%`;
+        progressBar.setAttribute("aria-valuenow", String(value));
+      }
+
+      function percent(done, total) {
+        if (total === 0) {
+          return 100;
+        }
+        return Math.min(100, Math.floor((done / total) * 100));
+      }
+
+      function formatBytes(value) {
+        if (value < 1024) {
+          return `${value} B`;
+        }
+        if (value < 1024 * 1024) {
+          return `${(value / 1024).toFixed(1)} KB`;
+        }
+        return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+      }
+    </script>
 
 {{ template "footer" .}}
 
