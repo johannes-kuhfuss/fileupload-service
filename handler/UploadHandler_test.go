@@ -152,6 +152,33 @@ func TestCompleteUploadEndpointRejectsIncompleteUpload(t *testing.T) {
 	}
 }
 
+func TestGetUploadEndpointRejectsUnknownUpload(t *testing.T) {
+	router, _ := testRouter(t)
+
+	w := performRequest(router, http.MethodGet, "/uploads/00000000-0000-0000-0000-000000000001", "", nil, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUploadChunkEndpointRejectsUnknownUpload(t *testing.T) {
+	router, _ := testRouter(t)
+
+	w := performRequest(router, http.MethodPatch, "/uploads/00000000-0000-0000-0000-000000000001", "application/octet-stream", strings.NewReader("hello"), map[string]string{"Upload-Offset": "0"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCompleteUploadEndpointRejectsUnknownUpload(t *testing.T) {
+	router, _ := testRouter(t)
+
+	w := performRequest(router, http.MethodPost, "/uploads/00000000-0000-0000-0000-000000000001/complete", "", nil, nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

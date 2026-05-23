@@ -73,6 +73,13 @@ func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain
 	if err := os.MkdirAll(filepath.Dir(absoluteQuarantinePath(s.Cfg, session)), 0o755); err != nil {
 		return domain.UploadSession{}, err
 	}
+	f, err := os.OpenFile(absoluteQuarantinePath(s.Cfg, session), os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return domain.UploadSession{}, err
+	}
+	if err := f.Close(); err != nil {
+		return domain.UploadSession{}, err
+	}
 	if err := persistSession(s.Cfg, session); err != nil {
 		return domain.UploadSession{}, err
 	}

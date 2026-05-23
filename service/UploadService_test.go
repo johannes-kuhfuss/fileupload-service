@@ -172,6 +172,23 @@ func TestCreateSessionSanitizesFileNameAndPersistsMetadata(t *testing.T) {
 	}
 }
 
+func TestCreateSessionNormalizesSHA256Checksum(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	svc := NewUploadService(&cfg)
+
+	session, err := svc.CreateSession(dto.CreateUploadRequest{
+		FileName: "track.wav",
+		FileSize: 1,
+		Checksum: "SHA256:" + strings.ToUpper(checksum("x")),
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if session.Checksum != checksum("x") {
+		t.Fatalf("Checksum = %q, want %q", session.Checksum, checksum("x"))
+	}
+}
+
 func TestWriteChunkRejectsUnexpectedOffset(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
@@ -374,6 +391,44 @@ func TestCompleteSessionRejectsChecksumMismatchAndDoesNotPublish(t *testing.T) {
 	}
 	if failed.ComputedChecksum != checksum("hello") {
 		t.Fatalf("computed checksum = %q, want %q", failed.ComputedChecksum, checksum("hello"))
+	}
+}
+
+func TestZeroByteUploadCompletesWithChecksum(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	svc := NewUploadService(&cfg)
+
+	session, err := svc.CreateSession(dto.CreateUploadRequest{
+		FileName: "empty.wav",
+		FileSize: 0,
+		Checksum: checksum(""),
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	completed, err := svc.CompleteSession(context.Background(), session.UploadID)
+	if err != nil {
+		t.Fatalf("CompleteSession() error = %v", err)
+	}
+	if completed.Status != domain.UploadStatusQuarantined {
+		t.Fatalf("status = %s, want %s", completed.Status, domain.UploadStatusQuarantined)
+	}
+	if completed.ComputedChecksum != checksum("") {
+		t.Fatalf("ComputedChecksum = %q, want %q", completed.ComputedChecksum, checksum(""))
+	}
+}
+
+func TestGetAndCompleteRejectUnknownUpload(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	svc := NewUploadService(&cfg)
+	uploadID := "00000000-0000-0000-0000-000000000001"
+
+	if _, err := svc.GetSession(uploadID); err == nil {
+		t.Fatal("GetSession() expected error")
+	}
+	if _, err := svc.CompleteSession(context.Background(), uploadID); err == nil {
+		t.Fatal("CompleteSession() expected error")
 	}
 }
 
