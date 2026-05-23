@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sanitize/sanitize"
+	"github.com/johannes-kuhfuss/fileupload-service/auth"
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/fileupload-service/handler"
 	"github.com/johannes-kuhfuss/fileupload-service/service"
@@ -41,6 +42,7 @@ var (
 	uploadHandler handler.UploadHandler
 	uiHandler     handler.UiHandler
 	otelShutdown  func(context.Context) error
+	authValidator *auth.Validator
 )
 
 func StartApp() {
@@ -54,6 +56,7 @@ func StartApp() {
 		panic(err)
 	}
 	setupOtel()
+	initAuth()
 
 	initRouter()
 	initServer()
@@ -109,6 +112,14 @@ func setupOtel() {
 	cfg.Metrics.UploadFailureCounter, _ = cfg.RunTime.OMeter.Int64Counter("uploadfailure.counter",
 		metric.WithDescription("Number of Failed Uploads"),
 		metric.WithUnit("{count}"))
+}
+
+func initAuth() {
+	var err error
+	authValidator, err = auth.NewValidator(context.Background(), cfg)
+	if err != nil {
+		panic(fmt.Errorf("auth initialization failed: %w", err))
+	}
 }
 
 func initRouter() {
@@ -168,10 +179,10 @@ func wireApp() {
 }
 
 func mapUrls() {
-	cfg.RunTime.Router.POST("/uploads", uploadHandler.CreateUpload)
-	cfg.RunTime.Router.GET("/uploads/:uploadID", uploadHandler.GetUpload)
-	cfg.RunTime.Router.PATCH("/uploads/:uploadID", uploadHandler.UploadChunk)
-	cfg.RunTime.Router.POST("/uploads/:uploadID/complete", uploadHandler.CompleteUpload)
+	cfg.RunTime.Router.POST("/uploads", authValidator.RequireScope(auth.ScopeUploadCreate), uploadHandler.CreateUpload)
+	cfg.RunTime.Router.GET("/uploads/:uploadID", authValidator.RequireScope(auth.ScopeUploadRead), uploadHandler.GetUpload)
+	cfg.RunTime.Router.PATCH("/uploads/:uploadID", authValidator.RequireScope(auth.ScopeUploadWrite), uploadHandler.UploadChunk)
+	cfg.RunTime.Router.POST("/uploads/:uploadID/complete", authValidator.RequireScope(auth.ScopeUploadComplete), uploadHandler.CompleteUpload)
 	cfg.RunTime.Router.GET("/", uiHandler.UploadPage)
 	cfg.RunTime.Router.GET("/files", uiHandler.UploadListPage)
 	cfg.RunTime.Router.GET("/about", uiHandler.AboutPage)

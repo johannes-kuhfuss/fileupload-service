@@ -1,0 +1,7 @@
+Review all changed code
+Add log messages
+Important next production steps: 
+- real broker adapter backed by the outbox
+- database-backed sessions if you run multiple replicas
+- malware scanning workflow (extra service, triggered by event)
+- object storage support for very large media files.

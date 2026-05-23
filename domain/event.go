@@ -8,6 +8,8 @@ type UploadEvent struct {
 	Source         string    `json:"source"`
 	OccurredAt     time.Time `json:"occurred_at"`
 	UploadID       string    `json:"upload_id"`
+	TenantID       string    `json:"tenant_id"`
+	ActorID        string    `json:"actor_id"`
 	FileName       string    `json:"file_name"`
 	FileSize       int64     `json:"file_size"`
 	ContentType    string    `json:"content_type,omitempty"`

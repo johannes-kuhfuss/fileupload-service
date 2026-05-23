@@ -75,6 +75,9 @@ func setValidBaseEnv(t *testing.T) {
 	t.Setenv("SERVER_IDLE_TIMEOUT_SECONDS", "120")
 	t.Setenv("USE_TLS", "false")
 	t.Setenv("MAX_UPLOAD_BYTES", "0")
+	t.Setenv("AUTH_ISSUER", "http://keycloak.local/realms/mam")
+	t.Setenv("AUTH_AUDIENCE", "fileupload-service")
+	t.Setenv("AUTH_JWKS_URL", "http://keycloak.local/realms/mam/protocol/openid-connect/certs")
 }
 
 func TestLoadConfigReturnsMissingFileError(t *testing.T) {

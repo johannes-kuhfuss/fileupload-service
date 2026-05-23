@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/johannes-kuhfuss/fileupload-service/auth"
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
@@ -38,7 +39,7 @@ func TestCreateUploadEndpoint(t *testing.T) {
 	if resp.Checksum != checksum("hello world") {
 		t.Fatalf("checksum = %q, want %q", resp.Checksum, checksum("hello world"))
 	}
-	if _, err := os.Stat(filepath.Join(cfg.Upload.QuarantinePath, "_sessions", resp.UploadID, "metadata.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(cfg.Upload.QuarantinePath, "_sessions", testIdentity().TenantID, resp.UploadID, "metadata.json")); err != nil {
 		t.Fatalf("metadata was not created: %v", err)
 	}
 }
@@ -195,11 +196,28 @@ func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	handler := NewUploadHandler(&cfg, svc)
 
 	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		auth.SetIdentity(c, testIdentity())
+		c.Next()
+	})
 	router.POST("/uploads", handler.CreateUpload)
 	router.GET("/uploads/:uploadID", handler.GetUpload)
 	router.PATCH("/uploads/:uploadID", handler.UploadChunk)
 	router.POST("/uploads/:uploadID/complete", handler.CompleteUpload)
 	return router, cfg
+}
+
+func testIdentity() domain.Identity {
+	return domain.Identity{
+		Subject:  "user-1",
+		TenantID: "tenant-a",
+		Scopes: []string{
+			auth.ScopeUploadCreate,
+			auth.ScopeUploadRead,
+			auth.ScopeUploadWrite,
+			auth.ScopeUploadComplete,
+		},
+	}
 }
 
 func createUploadViaHTTP(t *testing.T, router *gin.Engine, fileName string, contents string) dto.UploadSessionResponse {

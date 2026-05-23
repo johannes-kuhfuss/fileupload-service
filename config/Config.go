@@ -41,6 +41,11 @@ type AppConfig struct {
 		OutboxPath string `envconfig:"EVENT_OUTBOX_PATH"`
 		Source     string `envconfig:"EVENT_SOURCE" default:"fileupload-service"`
 	}
+	Auth struct {
+		Issuer   string `envconfig:"AUTH_ISSUER" required:"true"`
+		Audience string `envconfig:"AUTH_AUDIENCE" required:"true"`
+		JWKSURL  string `envconfig:"AUTH_JWKS_URL" required:"true"`
+	}
 	RunTime struct {
 		Router      *gin.Engine
 		ListenAddr  string

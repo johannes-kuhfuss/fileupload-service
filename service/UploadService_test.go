@@ -35,7 +35,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 	cfg := testConfig(tmp)
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName:    "track 01.wav",
 		FileSize:    11,
 		ContentType: "audio/wav",
@@ -45,7 +45,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	offset, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello "))
+	offset, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("hello "))
 	if err != nil {
 		t.Fatalf("WriteChunk(first) error = %v", err)
 	}
@@ -53,7 +53,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 		t.Fatalf("first offset = %d, want 6", offset)
 	}
 
-	resumed, err := svc.GetSession(session.UploadID)
+	resumed, err := svc.GetSession(testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 		t.Fatalf("resumed session = %+v", resumed)
 	}
 
-	offset, err = svc.WriteChunk(session.UploadID, 6, strings.NewReader("world"))
+	offset, err = svc.WriteChunk(testIdentity(), session.UploadID, 6, strings.NewReader("world"))
 	if err != nil {
 		t.Fatalf("WriteChunk(second) error = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 		t.Fatalf("second offset = %d, want 11", offset)
 	}
 
-	completed, err := svc.CompleteSession(context.Background(), session.UploadID)
+	completed, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("CompleteSession() error = %v", err)
 	}
@@ -138,7 +138,7 @@ func TestCreateSessionValidatesInput(t *testing.T) {
 			cfg.Upload.MaxUploadBytes = tt.maxSize
 			svc := NewUploadService(&cfg)
 
-			if _, err := svc.CreateSession(tt.req); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+			if _, err := svc.CreateSession(testIdentity(), tt.req); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("CreateSession() error = %v, want containing %q", err, tt.wantErr)
 			}
 		})
@@ -149,7 +149,7 @@ func TestCreateSessionSanitizesFileNameAndPersistsMetadata(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName:    " bad <track> 01 ;(draft).wav. ",
 		FileSize:    42,
 		ContentType: "audio/wav",
@@ -164,7 +164,7 @@ func TestCreateSessionSanitizesFileNameAndPersistsMetadata(t *testing.T) {
 	if session.ContentType != "audio/wav" || session.Checksum != checksum("x") {
 		t.Fatalf("metadata not preserved: %+v", session)
 	}
-	if _, err := os.Stat(sessionPath(&cfg, session.UploadID)); err != nil {
+	if _, err := os.Stat(sessionPath(&cfg, testIdentity().TenantID, session.UploadID)); err != nil {
 		t.Fatalf("metadata file missing: %v", err)
 	}
 	if _, err := os.Stat(filepath.Dir(filepath.Join(cfg.Upload.QuarantinePath, session.QuarantinePath))); err != nil {
@@ -176,7 +176,7 @@ func TestCreateSessionNormalizesSHA256Checksum(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 1,
 		Checksum: "SHA256:" + strings.ToUpper(checksum("x")),
@@ -193,7 +193,7 @@ func TestWriteChunkRejectsUnexpectedOffset(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
 		Checksum: checksum("hello"),
@@ -202,7 +202,7 @@ func TestWriteChunkRejectsUnexpectedOffset(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	if _, err := svc.WriteChunk(session.UploadID, 1, strings.NewReader("hello")); err == nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 1, strings.NewReader("hello")); err == nil {
 		t.Fatal("WriteChunk() expected offset error")
 	}
 }
@@ -211,7 +211,7 @@ func TestWriteChunkRejectsOversizedBodyWithoutAdvancingOffset(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
 		Checksum: checksum("hello"),
@@ -220,7 +220,7 @@ func TestWriteChunkRejectsOversizedBodyWithoutAdvancingOffset(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	offset, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello!"))
+	offset, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("hello!"))
 	if err == nil || !strings.Contains(err.Error(), "chunk exceeds remaining upload size") {
 		t.Fatalf("WriteChunk() error = %v, want oversized chunk error", err)
 	}
@@ -228,7 +228,7 @@ func TestWriteChunkRejectsOversizedBodyWithoutAdvancingOffset(t *testing.T) {
 		t.Fatalf("offset after rejected chunk = %d, want 0", offset)
 	}
 
-	resumed, err := svc.GetSession(session.UploadID)
+	resumed, err := svc.GetSession(testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
@@ -250,7 +250,7 @@ func TestCompleteSessionRequiresFullUploadAndDoesNotPublish(t *testing.T) {
 	svc := NewUploadService(&cfg)
 	svc.Publisher = publisher
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 10,
 		Checksum: checksum("short"),
@@ -258,11 +258,11 @@ func TestCompleteSessionRequiresFullUploadAndDoesNotPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("short")); err != nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("short")); err != nil {
 		t.Fatalf("WriteChunk() error = %v", err)
 	}
 
-	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err == nil || !strings.Contains(err.Error(), "is incomplete") {
+	if _, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID); err == nil || !strings.Contains(err.Error(), "is incomplete") {
 		t.Fatalf("CompleteSession() error = %v, want incomplete error", err)
 	}
 	if len(publisher.events) != 0 {
@@ -276,7 +276,7 @@ func TestCompleteSessionReturnsPublisherError(t *testing.T) {
 	svc := NewUploadService(&cfg)
 	svc.Publisher = publisher
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
 		Checksum: checksum("hello"),
@@ -284,10 +284,10 @@ func TestCompleteSessionReturnsPublisherError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello")); err != nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("hello")); err != nil {
 		t.Fatalf("WriteChunk() error = %v", err)
 	}
-	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err == nil || !strings.Contains(err.Error(), "broker unavailable") {
+	if _, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID); err == nil || !strings.Contains(err.Error(), "broker unavailable") {
 		t.Fatalf("CompleteSession() error = %v, want publisher error", err)
 	}
 }
@@ -298,7 +298,7 @@ func TestCompleteSessionPublishesExpectedEvent(t *testing.T) {
 	svc := NewUploadService(&cfg)
 	svc.Publisher = publisher
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName:    "track.wav",
 		FileSize:    5,
 		ContentType: "audio/wav",
@@ -307,11 +307,11 @@ func TestCompleteSessionPublishesExpectedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello")); err != nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("hello")); err != nil {
 		t.Fatalf("WriteChunk() error = %v", err)
 	}
 
-	completed, err := svc.CompleteSession(context.Background(), session.UploadID)
+	completed, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("CompleteSession() error = %v", err)
 	}
@@ -322,6 +322,8 @@ func TestCompleteSessionPublishesExpectedEvent(t *testing.T) {
 	if event.Type != "media.asset.uploaded.quarantined" ||
 		event.Source != "test" ||
 		event.UploadID != completed.UploadID ||
+		event.TenantID != testIdentity().TenantID ||
+		event.ActorID != testIdentity().Subject ||
 		event.FileName != "track.wav" ||
 		event.FileSize != 5 ||
 		event.ContentType != "audio/wav" ||
@@ -338,21 +340,21 @@ func TestWriteChunkRejectsUnknownInvalidAndCompletedSessions(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	if _, err := svc.WriteChunk("not-a-uuid", 0, strings.NewReader("x")); err == nil || !strings.Contains(err.Error(), "invalid upload_id") {
+	if _, err := svc.WriteChunk(testIdentity(), "not-a-uuid", 0, strings.NewReader("x")); err == nil || !strings.Contains(err.Error(), "invalid upload_id") {
 		t.Fatalf("WriteChunk(invalid id) error = %v, want invalid upload_id", err)
 	}
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1, Checksum: checksum("x")})
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1, Checksum: checksum("x")})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("x")); err != nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("x")); err != nil {
 		t.Fatalf("WriteChunk() error = %v", err)
 	}
-	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err != nil {
+	if _, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID); err != nil {
 		t.Fatalf("CompleteSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 1, strings.NewReader("y")); err == nil || !strings.Contains(err.Error(), "is not accepting data") {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 1, strings.NewReader("y")); err == nil || !strings.Contains(err.Error(), "is not accepting data") {
 		t.Fatalf("WriteChunk(completed) error = %v, want not accepting data", err)
 	}
 }
@@ -363,7 +365,7 @@ func TestCompleteSessionRejectsChecksumMismatchAndDoesNotPublish(t *testing.T) {
 	svc := NewUploadService(&cfg)
 	svc.Publisher = publisher
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
 		Checksum: checksum("other"),
@@ -371,18 +373,18 @@ func TestCompleteSessionRejectsChecksumMismatchAndDoesNotPublish(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
-	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello")); err != nil {
+	if _, err := svc.WriteChunk(testIdentity(), session.UploadID, 0, strings.NewReader("hello")); err != nil {
 		t.Fatalf("WriteChunk() error = %v", err)
 	}
 
-	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+	if _, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("CompleteSession() error = %v, want checksum mismatch", err)
 	}
 	if len(publisher.events) != 0 {
 		t.Fatalf("published events = %d, want 0", len(publisher.events))
 	}
 
-	failed, err := svc.GetSession(session.UploadID)
+	failed, err := svc.GetSession(testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
 	}
@@ -398,7 +400,7 @@ func TestZeroByteUploadCompletesWithChecksum(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
 		FileName: "empty.wav",
 		FileSize: 0,
 		Checksum: checksum(""),
@@ -407,7 +409,7 @@ func TestZeroByteUploadCompletesWithChecksum(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	completed, err := svc.CompleteSession(context.Background(), session.UploadID)
+	completed, err := svc.CompleteSession(context.Background(), testIdentity(), session.UploadID)
 	if err != nil {
 		t.Fatalf("CompleteSession() error = %v", err)
 	}
@@ -424,11 +426,50 @@ func TestGetAndCompleteRejectUnknownUpload(t *testing.T) {
 	svc := NewUploadService(&cfg)
 	uploadID := "00000000-0000-0000-0000-000000000001"
 
-	if _, err := svc.GetSession(uploadID); err == nil {
+	if _, err := svc.GetSession(testIdentity(), uploadID); err == nil {
 		t.Fatal("GetSession() expected error")
 	}
-	if _, err := svc.CompleteSession(context.Background(), uploadID); err == nil {
+	if _, err := svc.CompleteSession(context.Background(), testIdentity(), uploadID); err == nil {
 		t.Fatal("CompleteSession() expected error")
+	}
+}
+
+func TestSessionAccessIsTenantBound(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	svc := NewUploadService(&cfg)
+
+	session, err := svc.CreateSession(testIdentity(), dto.CreateUploadRequest{
+		FileName: "track.wav",
+		FileSize: 5,
+		Checksum: checksum("hello"),
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	otherTenant := domain.Identity{Subject: "user-2", TenantID: "tenant-b"}
+	if _, err := svc.GetSession(otherTenant, session.UploadID); err == nil {
+		t.Fatal("GetSession() expected cross-tenant error")
+	}
+	if _, err := svc.WriteChunk(otherTenant, session.UploadID, 0, strings.NewReader("hello")); err == nil {
+		t.Fatal("WriteChunk() expected cross-tenant error")
+	}
+	if _, err := svc.CompleteSession(context.Background(), otherTenant, session.UploadID); err == nil {
+		t.Fatal("CompleteSession() expected cross-tenant error")
+	}
+}
+
+func TestCreateSessionRejectsInvalidTenantIdentity(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	svc := NewUploadService(&cfg)
+
+	_, err := svc.CreateSession(domain.Identity{Subject: "user-1", TenantID: "../tenant"}, dto.CreateUploadRequest{
+		FileName: "track.wav",
+		FileSize: 5,
+		Checksum: checksum("hello"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "tenant_id contains unsupported characters") {
+		t.Fatalf("CreateSession() error = %v, want invalid tenant", err)
 	}
 }
 
@@ -518,6 +559,13 @@ func testConfig(root string) config.AppConfig {
 	cfg.Events.Source = "test"
 	cfg.Events.OutboxPath = filepath.Join(root, "events", "upload-events.ndjson")
 	return cfg
+}
+
+func testIdentity() domain.Identity {
+	return domain.Identity{
+		Subject:  "user-1",
+		TenantID: "tenant-a",
+	}
 }
 
 func checksum(value string) string {
