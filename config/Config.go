@@ -2,12 +2,12 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-sanitize/sanitize"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
-	"github.com/johannes-kuhfuss/services_utils/logger"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"go.opentelemetry.io/otel/metric"
@@ -63,21 +63,21 @@ var (
 
 func InitConfig(file string, config *AppConfig) error {
 	msg := fmt.Sprintf("Initalizing configuration from file %v...", file)
-	logger.Info(msg)
+	slog.Info(msg)
 	loadConfig(file)
 	err := envconfig.Process("", config)
 	if err != nil {
 		return fmt.Errorf("Could not initalize configuration. Check your environment variables. %v", err.Error())
 	}
 	msg = "Configuration initialized"
-	logger.Info(msg)
+	slog.Info(msg)
 	return nil
 }
 
 func loadConfig(file string) error {
 	err := godotenv.Load(file)
 	if err != nil {
-		logger.Warn("Could not open env file. Using Environment variable and defaults")
+		slog.Warn("Could not open env file. Using Environment variable and defaults")
 		return err
 	}
 	return nil
