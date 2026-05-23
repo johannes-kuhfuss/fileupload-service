@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +19,6 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
 )
-
-type Uploader interface {
-	Upload(context.Context, dto.FileDta) (string, string, int64, error)
-}
 
 type DefaultUploadService struct {
 	Cfg       *config.AppConfig
@@ -40,28 +37,6 @@ func NewUploadService(cfg *config.AppConfig) DefaultUploadService {
 	}
 }
 
-func (s DefaultUploadService) Upload(ctx context.Context, fd dto.FileDta) (newFilePath string, uploadID string, written int64, err error) {
-	fileName := sanitizeFileName(fd.Header.Filename)
-	session, err := s.CreateSession(dto.CreateUploadRequest{
-		FileName:    fileName,
-		FileSize:    fd.Header.Size,
-		ContentType: fd.Header.Header.Get("Content-Type"),
-	})
-	if err != nil {
-		return "", "", 0, err
-	}
-
-	written, err = s.WriteChunk(session.UploadID, 0, fd.File)
-	if err != nil {
-		return "", session.UploadID, written, err
-	}
-	session, err = s.CompleteSession(ctx, session.UploadID)
-	if err != nil {
-		return "", session.UploadID, written, err
-	}
-	return session.QuarantinePath, session.UploadID, written, nil
-}
-
 func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain.UploadSession, error) {
 	fileName := sanitizeFileName(req.FileName)
 	if fileName == "" {
@@ -73,6 +48,10 @@ func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain
 	if s.Cfg.Upload.MaxUploadBytes > 0 && req.FileSize > s.Cfg.Upload.MaxUploadBytes {
 		return domain.UploadSession{}, fmt.Errorf("file_size exceeds max upload size of %d bytes", s.Cfg.Upload.MaxUploadBytes)
 	}
+	checksum, err := normalizeSHA256(req.Checksum)
+	if err != nil {
+		return domain.UploadSession{}, err
+	}
 
 	now := time.Now().UTC()
 	uploadID := uuid.New().String()
@@ -81,7 +60,7 @@ func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain
 		FileName:       fileName,
 		FileSize:       req.FileSize,
 		ContentType:    req.ContentType,
-		Checksum:       req.Checksum,
+		Checksum:       checksum,
 		Status:         domain.UploadStatusReceiving,
 		QuarantinePath: filepath.Join(uploadID, fileName),
 		CreatedAt:      now,
@@ -159,6 +138,20 @@ func (s DefaultUploadService) CompleteSession(ctx context.Context, uploadID stri
 	}
 	if session.BytesReceived != session.FileSize {
 		return domain.UploadSession{}, fmt.Errorf("upload %s is incomplete: received %d of %d bytes", uploadID, session.BytesReceived, session.FileSize)
+	}
+
+	computedChecksum, err := fileSHA256(absoluteQuarantinePath(s.Cfg, session))
+	if err != nil {
+		return domain.UploadSession{}, err
+	}
+	session.ComputedChecksum = computedChecksum
+	if session.Checksum != computedChecksum {
+		session.Status = domain.UploadStatusChecksumFailed
+		session.UpdatedAt = time.Now().UTC()
+		if err := persistSession(s.Cfg, session); err != nil {
+			return domain.UploadSession{}, err
+		}
+		return domain.UploadSession{}, fmt.Errorf("checksum mismatch: client %s server %s", session.Checksum, computedChecksum)
 	}
 
 	session.Status = domain.UploadStatusQuarantined
@@ -258,4 +251,32 @@ func ParseUploadOffset(value string) (int64, error) {
 		return 0, errors.New("Upload-Offset header must be a non-negative integer")
 	}
 	return offset, nil
+}
+
+func normalizeSHA256(value string) (string, error) {
+	checksum := strings.TrimSpace(strings.ToLower(value))
+	checksum = strings.TrimPrefix(checksum, "sha256:")
+	if len(checksum) != sha256.Size*2 {
+		return "", errors.New("checksum must be a SHA-256 hex digest")
+	}
+	for _, r := range checksum {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return "", errors.New("checksum must be a SHA-256 hex digest")
+		}
+	}
+	return checksum, nil
+}
+
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }

@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +39,7 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 		FileName:    "track 01.wav",
 		FileSize:    11,
 		ContentType: "audio/wav",
+		Checksum:    checksum("hello world"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -73,6 +76,9 @@ func TestResumableUploadCompletesIntoQuarantineAndPublishesEvent(t *testing.T) {
 	if completed.Status != domain.UploadStatusQuarantined {
 		t.Fatalf("status = %s, want %s", completed.Status, domain.UploadStatusQuarantined)
 	}
+	if completed.Checksum != checksum("hello world") || completed.ComputedChecksum != checksum("hello world") {
+		t.Fatalf("checksums = client %q server %q", completed.Checksum, completed.ComputedChecksum)
+	}
 
 	contents, err := os.ReadFile(filepath.Join(cfg.Upload.QuarantinePath, completed.QuarantinePath))
 	if err != nil {
@@ -100,19 +106,29 @@ func TestCreateSessionValidatesInput(t *testing.T) {
 	}{
 		{
 			name:    "empty sanitized name",
-			req:     dto.CreateUploadRequest{FileName: `<>:"/\|?*;[]().`, FileSize: 1},
+			req:     dto.CreateUploadRequest{FileName: `<>:"/\|?*;[]().`, FileSize: 1, Checksum: checksum("x")},
 			wantErr: "file_name is required",
 		},
 		{
 			name:    "negative size",
-			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: -1},
+			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: -1, Checksum: checksum("x")},
 			wantErr: "file_size must be greater than or equal to zero",
 		},
 		{
 			name:    "exceeds max size",
-			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: 11},
+			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: 11, Checksum: checksum("x")},
 			maxSize: 10,
 			wantErr: "file_size exceeds max upload size",
+		},
+		{
+			name:    "missing checksum",
+			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1},
+			wantErr: "checksum must be a SHA-256 hex digest",
+		},
+		{
+			name:    "invalid checksum",
+			req:     dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1, Checksum: "not-a-checksum"},
+			wantErr: "checksum must be a SHA-256 hex digest",
 		},
 	}
 
@@ -137,7 +153,7 @@ func TestCreateSessionSanitizesFileNameAndPersistsMetadata(t *testing.T) {
 		FileName:    " bad <track> 01 ;(draft).wav. ",
 		FileSize:    42,
 		ContentType: "audio/wav",
-		Checksum:    "sha256:test",
+		Checksum:    "sha256:" + checksum("x"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -145,7 +161,7 @@ func TestCreateSessionSanitizesFileNameAndPersistsMetadata(t *testing.T) {
 	if session.FileName != "badtrack01draft.wav" {
 		t.Fatalf("FileName = %q, want sanitized name", session.FileName)
 	}
-	if session.ContentType != "audio/wav" || session.Checksum != "sha256:test" {
+	if session.ContentType != "audio/wav" || session.Checksum != checksum("x") {
 		t.Fatalf("metadata not preserved: %+v", session)
 	}
 	if _, err := os.Stat(sessionPath(&cfg, session.UploadID)); err != nil {
@@ -163,6 +179,7 @@ func TestWriteChunkRejectsUnexpectedOffset(t *testing.T) {
 	session, err := svc.CreateSession(dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
+		Checksum: checksum("hello"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -180,6 +197,7 @@ func TestWriteChunkRejectsOversizedBodyWithoutAdvancingOffset(t *testing.T) {
 	session, err := svc.CreateSession(dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
+		Checksum: checksum("hello"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -218,6 +236,7 @@ func TestCompleteSessionRequiresFullUploadAndDoesNotPublish(t *testing.T) {
 	session, err := svc.CreateSession(dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 10,
+		Checksum: checksum("short"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -243,6 +262,7 @@ func TestCompleteSessionReturnsPublisherError(t *testing.T) {
 	session, err := svc.CreateSession(dto.CreateUploadRequest{
 		FileName: "track.wav",
 		FileSize: 5,
+		Checksum: checksum("hello"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -265,7 +285,7 @@ func TestCompleteSessionPublishesExpectedEvent(t *testing.T) {
 		FileName:    "track.wav",
 		FileSize:    5,
 		ContentType: "audio/wav",
-		Checksum:    "sha256:test",
+		Checksum:    checksum("hello"),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
@@ -288,7 +308,7 @@ func TestCompleteSessionPublishesExpectedEvent(t *testing.T) {
 		event.FileName != "track.wav" ||
 		event.FileSize != 5 ||
 		event.ContentType != "audio/wav" ||
-		event.Checksum != "sha256:test" ||
+		event.Checksum != checksum("hello") ||
 		event.QuarantinePath != completed.QuarantinePath {
 		t.Fatalf("unexpected event: %+v", event)
 	}
@@ -305,7 +325,7 @@ func TestWriteChunkRejectsUnknownInvalidAndCompletedSessions(t *testing.T) {
 		t.Fatalf("WriteChunk(invalid id) error = %v, want invalid upload_id", err)
 	}
 
-	session, err := svc.CreateSession(dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1})
+	session, err := svc.CreateSession(dto.CreateUploadRequest{FileName: "track.wav", FileSize: 1, Checksum: checksum("x")})
 	if err != nil {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
@@ -317,6 +337,43 @@ func TestWriteChunkRejectsUnknownInvalidAndCompletedSessions(t *testing.T) {
 	}
 	if _, err := svc.WriteChunk(session.UploadID, 1, strings.NewReader("y")); err == nil || !strings.Contains(err.Error(), "is not accepting data") {
 		t.Fatalf("WriteChunk(completed) error = %v, want not accepting data", err)
+	}
+}
+
+func TestCompleteSessionRejectsChecksumMismatchAndDoesNotPublish(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	publisher := &recordingPublisher{}
+	svc := NewUploadService(&cfg)
+	svc.Publisher = publisher
+
+	session, err := svc.CreateSession(dto.CreateUploadRequest{
+		FileName: "track.wav",
+		FileSize: 5,
+		Checksum: checksum("other"),
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello")); err != nil {
+		t.Fatalf("WriteChunk() error = %v", err)
+	}
+
+	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("CompleteSession() error = %v, want checksum mismatch", err)
+	}
+	if len(publisher.events) != 0 {
+		t.Fatalf("published events = %d, want 0", len(publisher.events))
+	}
+
+	failed, err := svc.GetSession(session.UploadID)
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if failed.Status != domain.UploadStatusChecksumFailed {
+		t.Fatalf("status = %s, want %s", failed.Status, domain.UploadStatusChecksumFailed)
+	}
+	if failed.ComputedChecksum != checksum("hello") {
+		t.Fatalf("computed checksum = %q, want %q", failed.ComputedChecksum, checksum("hello"))
 	}
 }
 
@@ -406,4 +463,8 @@ func testConfig(root string) config.AppConfig {
 	cfg.Events.Source = "test"
 	cfg.Events.OutboxPath = filepath.Join(root, "events", "upload-events.ndjson")
 	return cfg
+}
+
+func checksum(value string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }

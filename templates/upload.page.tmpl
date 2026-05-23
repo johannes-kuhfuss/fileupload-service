@@ -49,10 +49,13 @@
 
         uploadButton.disabled = true;
         setProgress(0);
-        setStatus("Preparing upload...");
+        setStatus("Calculating checksum...");
 
         try {
-          const session = await getOrCreateUploadSession(file);
+          const checksum = await calculateChecksum(file);
+          setStatus("Preparing upload...");
+
+          const session = await getOrCreateUploadSession(file, checksum);
           let offset = session.bytes_received || 0;
           setProgress(percent(offset, file.size));
 
@@ -74,9 +77,9 @@
         }
       });
 
-      async function getOrCreateUploadSession(file) {
+      async function getOrCreateUploadSession(file, checksum) {
         const saved = loadSavedSession(file);
-        if (saved?.upload_id) {
+        if (saved?.upload_id && saved.checksum === checksum) {
           const response = await fetch(`/uploads/${saved.upload_id}`);
           if (response.ok) {
             const session = await response.json();
@@ -97,6 +100,7 @@
             file_name: file.name,
             file_size: file.size,
             content_type: file.type,
+            checksum: checksum,
           }),
         });
 
@@ -141,6 +145,7 @@
       function saveSession(file, session) {
         localStorage.setItem(sessionKey(file), JSON.stringify({
           upload_id: session.upload_id,
+          checksum: session.checksum,
         }));
       }
 
@@ -190,6 +195,14 @@
           return 100;
         }
         return Math.min(100, Math.floor((done / total) * 100));
+      }
+
+      async function calculateChecksum(file) {
+        const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+        const hash = Array.from(new Uint8Array(digest))
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+        return `sha256:${hash}`;
       }
 
       function formatBytes(value) {

@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,7 +23,7 @@ import (
 func TestCreateUploadEndpoint(t *testing.T) {
 	router, cfg := testRouter(t)
 
-	w := performRequest(router, http.MethodPost, "/uploads", "application/json", strings.NewReader(`{"file_name":"track 01.wav","file_size":11,"content_type":"audio/wav"}`), nil)
+	w := performRequest(router, http.MethodPost, "/uploads", "application/json", strings.NewReader(`{"file_name":"track 01.wav","file_size":11,"content_type":"audio/wav","checksum":"`+checksum("hello world")+`"}`), nil)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
@@ -34,6 +34,9 @@ func TestCreateUploadEndpoint(t *testing.T) {
 	}
 	if resp.UploadID == "" || resp.FileName != "track01.wav" || resp.FileSize != 11 || resp.Status != domain.UploadStatusReceiving {
 		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if resp.Checksum != checksum("hello world") {
+		t.Fatalf("checksum = %q, want %q", resp.Checksum, checksum("hello world"))
 	}
 	if _, err := os.Stat(filepath.Join(cfg.Upload.QuarantinePath, "_sessions", resp.UploadID, "metadata.json")); err != nil {
 		t.Fatalf("metadata was not created: %v", err)
@@ -46,8 +49,9 @@ func TestCreateUploadEndpointRejectsInvalidRequests(t *testing.T) {
 		body string
 	}{
 		{name: "invalid json", body: `not-json`},
-		{name: "disallowed extension", body: `{"file_name":"cover.jpg","file_size":1}`},
-		{name: "negative size", body: `{"file_name":"track.wav","file_size":-1}`},
+		{name: "disallowed extension", body: `{"file_name":"cover.jpg","file_size":1,"checksum":"` + checksum("x") + `"}`},
+		{name: "negative size", body: `{"file_name":"track.wav","file_size":-1,"checksum":"` + checksum("x") + `"}`},
+		{name: "missing checksum", body: `{"file_name":"track.wav","file_size":1}`},
 	}
 
 	for _, tt := range tests {
@@ -63,7 +67,7 @@ func TestCreateUploadEndpointRejectsInvalidRequests(t *testing.T) {
 
 func TestResumableUploadEndpoints(t *testing.T) {
 	router, cfg := testRouter(t)
-	session := createUploadViaHTTP(t, router, "track.wav", 11)
+	session := createUploadViaHTTP(t, router, "track.wav", "hello world")
 
 	w := performRequest(router, http.MethodPatch, "/uploads/"+session.UploadID, "application/octet-stream", strings.NewReader("hello "), map[string]string{"Upload-Offset": "0"})
 	if w.Code != http.StatusNoContent {
@@ -97,6 +101,9 @@ func TestResumableUploadEndpoints(t *testing.T) {
 	if completed.Status != domain.UploadStatusQuarantined || completed.BytesReceived != 11 {
 		t.Fatalf("unexpected completion response: %+v", completed)
 	}
+	if completed.Checksum != checksum("hello world") || completed.ComputedChecksum != checksum("hello world") {
+		t.Fatalf("checksums = client %q server %q", completed.Checksum, completed.ComputedChecksum)
+	}
 
 	contents, err := os.ReadFile(filepath.Join(cfg.Upload.QuarantinePath, completed.QuarantinePath))
 	if err != nil {
@@ -121,7 +128,7 @@ func TestUploadChunkEndpointRejectsBadOffsetsAndOversizedChunks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router, _ := testRouter(t)
-			session := createUploadViaHTTP(t, router, "track.wav", 5)
+			session := createUploadViaHTTP(t, router, "track.wav", "hello")
 			w := performRequest(router, http.MethodPatch, "/uploads/"+session.UploadID, "application/octet-stream", strings.NewReader(tt.body), tt.headers)
 			if w.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -132,7 +139,7 @@ func TestUploadChunkEndpointRejectsBadOffsetsAndOversizedChunks(t *testing.T) {
 
 func TestCompleteUploadEndpointRejectsIncompleteUpload(t *testing.T) {
 	router, _ := testRouter(t)
-	session := createUploadViaHTTP(t, router, "track.wav", 5)
+	session := createUploadViaHTTP(t, router, "track.wav", "hello")
 
 	w := performRequest(router, http.MethodPatch, "/uploads/"+session.UploadID, "application/octet-stream", strings.NewReader("he"), map[string]string{"Upload-Offset": "0"})
 	if w.Code != http.StatusNoContent {
@@ -142,41 +149,6 @@ func TestCompleteUploadEndpointRejectsIncompleteUpload(t *testing.T) {
 	w = performRequest(router, http.MethodPost, "/uploads/"+session.UploadID+"/complete", "", nil, nil)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("complete status = %d, body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestLegacyMultipartUploadEndpointWritesToQuarantine(t *testing.T) {
-	router, cfg := testRouter(t)
-	body, contentType := multipartBody(t, "file", "track.wav", "hello")
-
-	w := performRequest(router, http.MethodPost, "/upload", contentType, body, nil)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-
-	var resp dto.FileRet
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-	if resp.UploadID == "" || resp.Status != domain.UploadStatusQuarantined || resp.BytesWritten != 5 {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	contents, err := os.ReadFile(filepath.Join(cfg.Upload.QuarantinePath, resp.NewFilePath))
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	if string(contents) != "hello" {
-		t.Fatalf("contents = %q, want hello", string(contents))
-	}
-}
-
-func TestLegacyMultipartUploadEndpointRejectsDisallowedExtension(t *testing.T) {
-	router, _ := testRouter(t)
-	body, contentType := multipartBody(t, "file", "cover.jpg", "hello")
-
-	w := performRequest(router, http.MethodPost, "/upload", contentType, body, nil)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 }
 
@@ -196,7 +168,6 @@ func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	handler := NewUploadHandler(&cfg, svc)
 
 	router := gin.New()
-	router.POST("/upload", handler.Receive)
 	router.POST("/uploads", handler.CreateUpload)
 	router.GET("/uploads/:uploadID", handler.GetUpload)
 	router.PATCH("/uploads/:uploadID", handler.UploadChunk)
@@ -204,9 +175,9 @@ func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	return router, cfg
 }
 
-func createUploadViaHTTP(t *testing.T, router *gin.Engine, fileName string, size int64) dto.UploadSessionResponse {
+func createUploadViaHTTP(t *testing.T, router *gin.Engine, fileName string, contents string) dto.UploadSessionResponse {
 	t.Helper()
-	body := strings.NewReader(`{"file_name":"` + fileName + `","file_size":` + strconv.FormatInt(size, 10) + `}`)
+	body := strings.NewReader(`{"file_name":"` + fileName + `","file_size":` + strconv.FormatInt(int64(len(contents)), 10) + `,"checksum":"` + checksum(contents) + `"}`)
 	w := performRequest(router, http.MethodPost, "/uploads", "application/json", body, nil)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, body = %s", w.Code, w.Body.String())
@@ -231,19 +202,6 @@ func performRequest(router *gin.Engine, method, target, contentType string, body
 	return w
 }
 
-func multipartBody(t *testing.T, fieldName, fileName, contents string) (io.Reader, string) {
-	t.Helper()
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile(fieldName, fileName)
-	if err != nil {
-		t.Fatalf("CreateFormFile() error = %v", err)
-	}
-	if _, err := part.Write([]byte(contents)); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	return &body, writer.FormDataContentType()
+func checksum(value string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
 }

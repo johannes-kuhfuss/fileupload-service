@@ -8,19 +8,12 @@ import (
 	"slices"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
-	"github.com/johannes-kuhfuss/fileupload-service/helper"
 	"github.com/johannes-kuhfuss/fileupload-service/service"
 	"github.com/johannes-kuhfuss/services_utils/api_error"
-	"github.com/johannes-kuhfuss/services_utils/logger"
 	"go.opentelemetry.io/otel/metric"
-)
-
-const (
-	eMsg = "Error Message"
 )
 
 type UploadHandler struct {
@@ -33,71 +26,6 @@ func NewUploadHandler(cfg *config.AppConfig, svc service.DefaultUploadService) U
 		Cfg: cfg,
 		Svc: svc,
 	}
-}
-
-func (uh UploadHandler) Receive(c *gin.Context) {
-	var (
-		fd dto.FileDta
-	)
-
-	fd.FileId = uuid.New()
-
-	msg := fmt.Sprintf("Upload request %v received.", fd.FileId.String())
-	logger.Info(msg)
-
-	err := c.Request.ParseMultipartForm(32 << 20)
-	if err != nil {
-		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
-		msg := fmt.Sprintf("error getting form for request %v", fd.FileId.String())
-		logger.Error(msg, err)
-		apiErr := api_error.NewInternalServerError(msg, err)
-		c.JSON(apiErr.StatusCode(), apiErr)
-		return
-	}
-	fd.File, fd.Header, err = c.Request.FormFile("file")
-	if err != nil {
-		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
-		msg := fmt.Sprintf("cannot read remote file for request %v", fd.FileId.String())
-		logger.Error(msg, err)
-		apiErr := api_error.NewInternalServerError(msg, err)
-		c.JSON(apiErr.StatusCode(), apiErr)
-		return
-	}
-	defer fd.File.Close()
-
-	if !slices.Contains(uh.Cfg.Upload.AllowedExtensions, filepath.Ext(fd.Header.Filename)) {
-		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
-		msg := fmt.Sprintf("Cannot upload file %v with extension %v", fd.Header.Filename, filepath.Ext(fd.Header.Filename))
-		helper.AddToUploadList(uh.Cfg, fd, msg, "")
-		logger.Warn(msg)
-		apiErr := api_error.NewBadRequestError(msg)
-		c.JSON(apiErr.StatusCode(), apiErr)
-		return
-	}
-	newFilePath, uploadID, written, err := uh.Svc.Upload(c.Request.Context(), fd)
-	fd.FileSize = written
-	if err != nil {
-		addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadFailureCounter)
-		msg := fmt.Sprintf("Could not complete the upload request %v for file %v", fd.FileId.String(), fd.Header.Filename)
-		helper.AddToUploadList(uh.Cfg, fd, msg, "")
-		logger.Error(msg, err)
-		apiErr := api_error.NewInternalServerError(msg, err)
-		c.JSON(apiErr.StatusCode(), apiErr)
-		return
-	}
-	helper.AddToUploadList(uh.Cfg, fd, "Successfully completed", newFilePath)
-	msg = fmt.Sprintf("Upload request %v for file %v sucessfully completed.", fd.FileId.String(), fd.Header.Filename)
-	logger.Info(msg)
-	addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadSuccessCounter)
-
-	ret := dto.FileRet{
-		FileName:     fd.Header.Filename,
-		BytesWritten: fd.FileSize,
-		NewFilePath:  newFilePath,
-		UploadID:     uploadID,
-		Status:       domain.UploadStatusQuarantined,
-	}
-	c.JSON(http.StatusCreated, ret)
 }
 
 func (uh UploadHandler) CreateUpload(c *gin.Context) {
@@ -176,12 +104,14 @@ func (uh UploadHandler) CompleteUpload(c *gin.Context) {
 	}
 	addMetric(c.Request.Context(), uh.Cfg.Metrics.UploadSuccessCounter)
 	c.JSON(http.StatusOK, dto.CompleteUploadResponse{
-		UploadID:       session.UploadID,
-		FileName:       session.FileName,
-		FileSize:       session.FileSize,
-		BytesReceived:  session.BytesReceived,
-		Status:         session.Status,
-		QuarantinePath: session.QuarantinePath,
+		UploadID:         session.UploadID,
+		FileName:         session.FileName,
+		FileSize:         session.FileSize,
+		BytesReceived:    session.BytesReceived,
+		Status:           session.Status,
+		QuarantinePath:   session.QuarantinePath,
+		Checksum:         session.Checksum,
+		ComputedChecksum: session.ComputedChecksum,
 	})
 }
 
@@ -191,12 +121,14 @@ func (uh UploadHandler) allowedExtension(fileName string) bool {
 
 func sessionResponse(session domain.UploadSession) dto.UploadSessionResponse {
 	return dto.UploadSessionResponse{
-		UploadID:       session.UploadID,
-		FileName:       session.FileName,
-		FileSize:       session.FileSize,
-		BytesReceived:  session.BytesReceived,
-		Status:         session.Status,
-		QuarantinePath: session.QuarantinePath,
+		UploadID:         session.UploadID,
+		FileName:         session.FileName,
+		FileSize:         session.FileSize,
+		BytesReceived:    session.BytesReceived,
+		Status:           session.Status,
+		QuarantinePath:   session.QuarantinePath,
+		Checksum:         session.Checksum,
+		ComputedChecksum: session.ComputedChecksum,
 	}
 }
 

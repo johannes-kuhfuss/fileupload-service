@@ -166,7 +166,6 @@ func wireApp() {
 }
 
 func mapUrls() {
-	cfg.RunTime.Router.POST("/upload", uploadHandler.Receive)
 	cfg.RunTime.Router.POST("/uploads", uploadHandler.CreateUpload)
 	cfg.RunTime.Router.GET("/uploads/:uploadID", uploadHandler.GetUpload)
 	cfg.RunTime.Router.PATCH("/uploads/:uploadID", uploadHandler.UploadChunk)

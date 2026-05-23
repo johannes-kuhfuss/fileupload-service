@@ -6,23 +6,21 @@ area and emits an upload event for downstream services.
 
 ## Upload flow
 
-The service supports two upload modes:
+The service supports a resumable upload API:
 
-- `POST /upload`: compatibility endpoint for simple multipart form uploads with a
-  `file` field.
-- Resumable upload API:
-  - `POST /uploads` creates an upload session.
-  - `PATCH /uploads/{upload_id}` appends bytes at the `Upload-Offset` header.
-  - `GET /uploads/{upload_id}` returns the current offset for resume.
-  - `POST /uploads/{upload_id}/complete` finalizes the upload in quarantine and
-    writes a `media.asset.uploaded.quarantined` event.
+- `POST /uploads` creates an upload session with the client-side SHA-256 checksum.
+- `PATCH /uploads/{upload_id}` appends bytes at the `Upload-Offset` header.
+- `GET /uploads/{upload_id}` returns the current offset for resume.
+- `POST /uploads/{upload_id}/complete` calculates the server-side SHA-256 checksum,
+  compares it with the client checksum, finalizes the upload in quarantine, and
+  writes a `media.asset.uploaded.quarantined` event.
 
 Example resumable flow:
 
 ```bash
 curl -X POST http://localhost:8080/uploads \
   -H "Content-Type: application/json" \
-  -d '{"file_name":"track.wav","file_size":104857600,"content_type":"audio/wav"}'
+  -d '{"file_name":"track.wav","file_size":104857600,"content_type":"audio/wav","checksum":"sha256:<hex-digest>"}'
 
 curl -X PATCH http://localhost:8080/uploads/{upload_id} \
   -H "Upload-Offset: 0" \
