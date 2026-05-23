@@ -36,7 +36,7 @@ type AppConfig struct {
 		UploadPath        string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP\\DST"`
 		QuarantinePath    string   `envconfig:"QUARANTINE_PATH" default:"C:\\TEMP\\SRC"`
 		MaxUploadBytes    int64    `envconfig:"MAX_UPLOAD_BYTES" default:"0"`
-		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav"`
+		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav,.flac"`
 	}
 	Events struct {
 		OutboxPath string `envconfig:"EVENT_OUTBOX_PATH"`
