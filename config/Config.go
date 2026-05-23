@@ -33,8 +33,8 @@ type AppConfig struct {
 		TemplatePath string `envconfig:"TEMPLATE_PATH" default:"./templates/"`
 	}
 	Upload struct {
-		UploadPath        string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP"`
-		QuarantinePath    string   `envconfig:"QUARANTINE_PATH"`
+		UploadPath        string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP\\DST"`
+		QuarantinePath    string   `envconfig:"QUARANTINE_PATH" default:"C:\\TEMP\\SRC"`
 		MaxUploadBytes    int64    `envconfig:"MAX_UPLOAD_BYTES" default:"0"`
 		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav"`
 	}
