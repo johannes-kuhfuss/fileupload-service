@@ -21,6 +21,9 @@ type AppConfig struct {
 		Port                 string `envconfig:"SERVER_PORT" default:"8080"`
 		TlsPort              string `envconfig:"SERVER_TLS_PORT" default:"8443"`
 		GracefulShutdownTime int    `envconfig:"GRACEFUL_SHUTDOWN_TIME" default:"10"`
+		ReadTimeoutSeconds   int    `envconfig:"SERVER_READ_TIMEOUT_SECONDS" default:"1800"`
+		WriteTimeoutSeconds  int    `envconfig:"SERVER_WRITE_TIMEOUT_SECONDS" default:"1800"`
+		IdleTimeoutSeconds   int    `envconfig:"SERVER_IDLE_TIMEOUT_SECONDS" default:"120"`
 		UseTls               bool   `envconfig:"USE_TLS" default:"false"`
 		CertFile             string `envconfig:"CERT_FILE" default:"./cert/cert.pem"`
 		KeyFile              string `envconfig:"KEY_FILE" default:"./cert/cert.key"`
@@ -31,7 +34,13 @@ type AppConfig struct {
 	}
 	Upload struct {
 		UploadPath        string   `envconfig:"UPLOAD_PATH" default:"C:\\TEMP"`
+		QuarantinePath    string   `envconfig:"QUARANTINE_PATH"`
+		MaxUploadBytes    int64    `envconfig:"MAX_UPLOAD_BYTES" default:"0"`
 		AllowedExtensions []string `envconfig:"ALLOWED_EXTENSIONS" default:".mp3,.m4a,.wav"`
+	}
+	Events struct {
+		OutboxPath string `envconfig:"EVENT_OUTBOX_PATH"`
+		Source     string `envconfig:"EVENT_SOURCE" default:"fileupload-service"`
 	}
 	Xcode struct {
 		Host string `envconfig:"XCODE_HOST"`

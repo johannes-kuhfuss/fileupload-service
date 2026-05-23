@@ -140,10 +140,10 @@ func initServer() {
 	server = http.Server{
 		Addr:              cfg.RunTime.ListenAddr,
 		Handler:           cfg.RunTime.Router,
-		ReadTimeout:       5 * time.Second,
+		ReadTimeout:       time.Duration(cfg.Server.ReadTimeoutSeconds) * time.Second,
 		ReadHeaderTimeout: 0,
-		WriteTimeout:      5 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		WriteTimeout:      time.Duration(cfg.Server.WriteTimeoutSeconds) * time.Second,
+		IdleTimeout:       time.Duration(cfg.Server.IdleTimeoutSeconds) * time.Second,
 		MaxHeaderBytes:    0,
 	}
 	if cfg.Server.UseTls {
@@ -160,6 +160,10 @@ func wireApp() {
 
 func mapUrls() {
 	cfg.RunTime.Router.POST("/upload", uploadHandler.Receive)
+	cfg.RunTime.Router.POST("/uploads", uploadHandler.CreateUpload)
+	cfg.RunTime.Router.GET("/uploads/:uploadID", uploadHandler.GetUpload)
+	cfg.RunTime.Router.PATCH("/uploads/:uploadID", uploadHandler.UploadChunk)
+	cfg.RunTime.Router.POST("/uploads/:uploadID/complete", uploadHandler.CompleteUpload)
 	cfg.RunTime.Router.GET("/", uiHandler.UploadPage)
 	cfg.RunTime.Router.GET("/files", uiHandler.UploadListPage)
 	cfg.RunTime.Router.GET("/about", uiHandler.AboutPage)

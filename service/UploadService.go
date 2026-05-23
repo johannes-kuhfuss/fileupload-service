@@ -1,48 +1,182 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/johannes-kuhfuss/fileupload-service/config"
+	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
 )
 
 type Uploader interface {
-	Upload(dto.FileDta)
+	Upload(context.Context, dto.FileDta) (string, string, int64, error)
 }
 
 type DefaultUploadService struct {
-	Cfg *config.AppConfig
+	Cfg       *config.AppConfig
+	Publisher EventPublisher
 }
 
 func NewUploadService(cfg *config.AppConfig) DefaultUploadService {
+	outboxPath := cfg.Events.OutboxPath
+	if outboxPath == "" {
+		outboxPath = filepath.Join(uploadRoot(cfg), "events", "upload-events.ndjson")
+	}
+	publisher := NewOutboxEventPublisher(outboxPath)
 	return DefaultUploadService{
-		Cfg: cfg,
+		Cfg:       cfg,
+		Publisher: &publisher,
 	}
 }
 
-func (s DefaultUploadService) Upload(fd dto.FileDta) (newFilePath string, written int64, err error) {
+func (s DefaultUploadService) Upload(ctx context.Context, fd dto.FileDta) (newFilePath string, uploadID string, written int64, err error) {
 	fileName := sanitizeFileName(fd.Header.Filename)
-	localFile := buildFileName(s.Cfg.Upload.UploadPath, fd.FileId.String(), fileName)
-	dst, err := os.Create(localFile)
+	session, err := s.CreateSession(dto.CreateUploadRequest{
+		FileName:    fileName,
+		FileSize:    fd.Header.Size,
+		ContentType: fd.Header.Header.Get("Content-Type"),
+	})
 	if err != nil {
-		return "", 0, err
+		return "", "", 0, err
+	}
+
+	written, err = s.WriteChunk(session.UploadID, 0, fd.File)
+	if err != nil {
+		return "", session.UploadID, written, err
+	}
+	session, err = s.CompleteSession(ctx, session.UploadID)
+	if err != nil {
+		return "", session.UploadID, written, err
+	}
+	return session.QuarantinePath, session.UploadID, written, nil
+}
+
+func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain.UploadSession, error) {
+	fileName := sanitizeFileName(req.FileName)
+	if fileName == "" {
+		return domain.UploadSession{}, errors.New("file_name is required")
+	}
+	if req.FileSize < 0 {
+		return domain.UploadSession{}, errors.New("file_size must be greater than or equal to zero")
+	}
+	if s.Cfg.Upload.MaxUploadBytes > 0 && req.FileSize > s.Cfg.Upload.MaxUploadBytes {
+		return domain.UploadSession{}, fmt.Errorf("file_size exceeds max upload size of %d bytes", s.Cfg.Upload.MaxUploadBytes)
+	}
+
+	now := time.Now().UTC()
+	uploadID := uuid.New().String()
+	session := domain.UploadSession{
+		UploadID:       uploadID,
+		FileName:       fileName,
+		FileSize:       req.FileSize,
+		ContentType:    req.ContentType,
+		Checksum:       req.Checksum,
+		Status:         domain.UploadStatusReceiving,
+		QuarantinePath: filepath.Join(uploadID, fileName),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	if err := os.MkdirAll(sessionDir(s.Cfg, uploadID), 0o755); err != nil {
+		return domain.UploadSession{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(absoluteQuarantinePath(s.Cfg, session)), 0o755); err != nil {
+		return domain.UploadSession{}, err
+	}
+	if err := persistSession(s.Cfg, session); err != nil {
+		return domain.UploadSession{}, err
+	}
+	return session, nil
+}
+
+func (s DefaultUploadService) GetSession(uploadID string) (domain.UploadSession, error) {
+	return readSession(s.Cfg, uploadID)
+}
+
+func (s DefaultUploadService) WriteChunk(uploadID string, offset int64, body io.Reader) (int64, error) {
+	session, err := readSession(s.Cfg, uploadID)
+	if err != nil {
+		return 0, err
+	}
+	if session.Status != domain.UploadStatusReceiving {
+		return session.BytesReceived, fmt.Errorf("upload %s is not accepting data", uploadID)
+	}
+	if offset != session.BytesReceived {
+		return session.BytesReceived, fmt.Errorf("invalid offset %d, expected %d", offset, session.BytesReceived)
+	}
+
+	dst, err := os.OpenFile(absoluteQuarantinePath(s.Cfg, session), os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return session.BytesReceived, err
 	}
 	defer dst.Close()
-	bw, err := io.Copy(dst, fd.File)
-	if err != nil {
-		return "", 0, err
+	if _, err := dst.Seek(offset, io.SeekStart); err != nil {
+		return session.BytesReceived, err
 	}
-	return path.Join(fd.FileId.String(), fileName), bw, nil
+
+	remaining := session.FileSize - session.BytesReceived
+	if remaining < 0 {
+		return session.BytesReceived, errors.New("session has received more bytes than declared")
+	}
+	reader := body
+	if session.FileSize > 0 {
+		reader = io.LimitReader(body, remaining)
+	}
+	written, err := io.Copy(dst, reader)
+	if err != nil {
+		return session.BytesReceived, err
+	}
+
+	session.BytesReceived += written
+	session.UpdatedAt = time.Now().UTC()
+	if err := persistSession(s.Cfg, session); err != nil {
+		return session.BytesReceived, err
+	}
+	return session.BytesReceived, nil
 }
 
-func buildFileName(uploadPath, fileId, fileName string) string {
-	os.MkdirAll(path.Join(uploadPath, fileId), os.ModePerm)
-	return path.Join(uploadPath, fileId, fileName)
+func (s DefaultUploadService) CompleteSession(ctx context.Context, uploadID string) (domain.UploadSession, error) {
+	session, err := readSession(s.Cfg, uploadID)
+	if err != nil {
+		return domain.UploadSession{}, err
+	}
+	if session.BytesReceived != session.FileSize {
+		return domain.UploadSession{}, fmt.Errorf("upload %s is incomplete: received %d of %d bytes", uploadID, session.BytesReceived, session.FileSize)
+	}
+
+	session.Status = domain.UploadStatusQuarantined
+	session.UpdatedAt = time.Now().UTC()
+	if err := persistSession(s.Cfg, session); err != nil {
+		return domain.UploadSession{}, err
+	}
+
+	event := domain.UploadEvent{
+		EventID:        uuid.New().String(),
+		Type:           "media.asset.uploaded.quarantined",
+		Source:         s.Cfg.Events.Source,
+		OccurredAt:     time.Now().UTC(),
+		UploadID:       session.UploadID,
+		FileName:       session.FileName,
+		FileSize:       session.FileSize,
+		ContentType:    session.ContentType,
+		Checksum:       session.Checksum,
+		QuarantinePath: session.QuarantinePath,
+	}
+	if err := s.Publisher.PublishUploadQuarantined(ctx, event); err != nil {
+		return domain.UploadSession{}, err
+	}
+	return session, nil
 }
 
 func sanitizeFileName(fileName string) string {
@@ -57,4 +191,65 @@ func sanitizeFileName(fileName string) string {
 	newName = spaces.ReplaceAllString(newName, "")
 
 	return newName
+}
+
+func uploadRoot(cfg *config.AppConfig) string {
+	if cfg.Upload.QuarantinePath != "" {
+		return cfg.Upload.QuarantinePath
+	}
+	return filepath.Join(cfg.Upload.UploadPath, "quarantine")
+}
+
+func sessionDir(cfg *config.AppConfig, uploadID string) string {
+	return filepath.Join(uploadRoot(cfg), "_sessions", uploadID)
+}
+
+func sessionPath(cfg *config.AppConfig, uploadID string) string {
+	return filepath.Join(sessionDir(cfg, uploadID), "metadata.json")
+}
+
+func absoluteQuarantinePath(cfg *config.AppConfig, session domain.UploadSession) string {
+	return filepath.Join(uploadRoot(cfg), session.QuarantinePath)
+}
+
+func persistSession(cfg *config.AppConfig, session domain.UploadSession) error {
+	if err := os.MkdirAll(sessionDir(cfg, session.UploadID), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(sessionPath(cfg, session.UploadID))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(session)
+}
+
+func readSession(cfg *config.AppConfig, uploadID string) (domain.UploadSession, error) {
+	if _, err := uuid.Parse(uploadID); err != nil {
+		return domain.UploadSession{}, fmt.Errorf("invalid upload_id: %w", err)
+	}
+	f, err := os.Open(sessionPath(cfg, uploadID))
+	if err != nil {
+		return domain.UploadSession{}, err
+	}
+	defer f.Close()
+
+	var session domain.UploadSession
+	if err := json.NewDecoder(f).Decode(&session); err != nil {
+		return domain.UploadSession{}, err
+	}
+	return session, nil
+}
+
+func ParseUploadOffset(value string) (int64, error) {
+	if value == "" {
+		return 0, errors.New("Upload-Offset header is required")
+	}
+	offset, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || offset < 0 {
+		return 0, errors.New("Upload-Offset header must be a non-negative integer")
+	}
+	return offset, nil
 }
