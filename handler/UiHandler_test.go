@@ -16,6 +16,8 @@ func TestUiHandlerPagesRender(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var cfg config.AppConfig
+	cfg.Auth.Issuer = "http://localhost:8081/realms/mam-dev"
+	cfg.Auth.Audience = "fileupload-service"
 	cfg.RunTime.UploadList = []domain.Upload{
 		{
 			UploadDate:  "2026-05-23 09:00:00",
@@ -34,11 +36,17 @@ func TestUiHandlerPagesRender(t *testing.T) {
 	router.GET("/about", ui.AboutPage)
 
 	tests := []struct {
-		name     string
-		path     string
-		contains []string
+		name        string
+		path        string
+		contains    []string
+		notContains []string
 	}{
-		{name: "upload", path: "/", contains: []string{"Media Upload", "calculateChecksum", "/uploads"}},
+		{
+			name:        "upload",
+			path:        "/",
+			contains:    []string{"Media Upload", "startLogin", "code_challenge_method", "calculateChecksum", "/uploads", "http://localhost:8081/realms/mam-dev", "fileupload-service"},
+			notContains: []string{"access-token", "Paste a Keycloak access token"},
+		},
 		{name: "files", path: "/files", contains: []string{"Files uploaded", "track.wav", "quarantined"}},
 		{name: "about", path: "/about", contains: []string{"About"}},
 	}
@@ -55,6 +63,11 @@ func TestUiHandlerPagesRender(t *testing.T) {
 			for _, expected := range tt.contains {
 				if !strings.Contains(w.Body.String(), expected) {
 					t.Fatalf("body does not contain %q: %s", expected, w.Body.String())
+				}
+			}
+			for _, unexpected := range tt.notContains {
+				if strings.Contains(w.Body.String(), unexpected) {
+					t.Fatalf("body contains %q: %s", unexpected, w.Body.String())
 				}
 			}
 		})

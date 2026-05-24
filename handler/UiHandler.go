@@ -26,8 +26,10 @@ func (uh *UiHandler) AboutPage(c *gin.Context) {
 
 func (uh *UiHandler) UploadPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "upload.page.tmpl", gin.H{
-		"title": "Upload",
-		"data":  nil,
+		"title":        "Upload",
+		"data":         nil,
+		"authIssuer":   uh.Cfg.Auth.Issuer,
+		"authClientID": uh.Cfg.Auth.Audience,
 	})
 }
 

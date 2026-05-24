@@ -57,6 +57,47 @@ quarantine/_sessions/{tenant_id}/{upload_id}/metadata.json
 
 Session-specific API calls only resolve sessions inside the caller's tenant.
 
+### Local Keycloak
+
+Build and run the local Keycloak image:
+
+```bash
+docker build -f Dockerfile.keycloak -t fileupload-keycloak .
+
+docker run --rm \
+  --name fileupload-keycloak \
+  -p 8081:8081 \
+  -e KEYCLOAK_ADMIN=admin \
+  -e KEYCLOAK_ADMIN_PASSWORD=admin \
+  fileupload-keycloak
+```
+
+The image imports `keycloak/mam-dev-realm.json` with:
+
+- realm: `mam-dev`
+- client: `fileupload-service`
+- user: `developer`
+- password: `developer`
+- tenant claim: `tenant_id=tenant-local`
+
+For the embedded UI, open `http://localhost:8080`, click `Login`, and sign in
+with `developer` / `developer`. The UI uses the OpenID Connect authorization
+code flow with PKCE and stores tokens in browser session storage.
+
+For API-only testing, get a local access token:
+
+```bash
+curl -X POST http://localhost:8081/realms/mam-dev/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password" \
+  -d "client_id=fileupload-service" \
+  -d "username=developer" \
+  -d "password=developer"
+```
+
+Use the returned `access_token` as the `Authorization: Bearer` value in curl or
+other API clients.
+
 Uploaded bytes are stored under `QUARANTINE_PATH` while the event outbox records
 what later malware scanning, metadata extraction, rendition, and catalog
 services should consume. In production this outbox boundary should be connected
