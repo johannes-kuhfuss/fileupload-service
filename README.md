@@ -79,6 +79,7 @@ The image imports `keycloak/mam-dev-realm.json` with:
 - user: `developer`
 - password: `developer`
 - tenant claim: `tenant_id=tenant-local`
+- access tokens: regular JWT access tokens with lightweight access tokens disabled
 
 For the embedded UI, open `http://localhost:8081`, click `Login`, and sign in
 with `developer` / `developer`. The UI uses the OpenID Connect authorization

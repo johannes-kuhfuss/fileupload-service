@@ -22,7 +22,8 @@
         "http://127.0.0.1:8081"
       ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "use.lightweight.access.token.enabled": "false"
       },
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": true,
