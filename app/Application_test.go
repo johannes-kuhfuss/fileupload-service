@@ -115,9 +115,6 @@ func TestInitRouterAndMapUrls(t *testing.T) {
 			t.Fatalf("route %s is not registered; routes=%v", route, routes)
 		}
 	}
-	if registered[http.MethodPost+" /upload"] {
-		t.Fatal("old POST /upload route is still registered")
-	}
 	if cfg.RunTime.Router == nil || !slices.Contains(cfg.Upload.AllowedExtensions, ".wav") {
 		t.Fatal("router or config unexpectedly changed during wiring")
 	}

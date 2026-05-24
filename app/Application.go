@@ -47,8 +47,7 @@ var (
 
 func StartApp() {
 	setupDefaultLogger()
-	msg := "Starting application..."
-	slog.Info(msg)
+	slog.Info("Starting application...")
 
 	getCmdLine()
 	err := config.InitConfig(config.EnvFile, &cfg)
@@ -70,11 +69,9 @@ func StartApp() {
 	cleanUp()
 
 	if err := server.Shutdown(ctx); err != nil {
-		msg := "Graceful shutdown failed"
-		slog.Error(msg, slog.String(eMsg, err.Error()))
+		slog.Error("Graceful shutdown failed", slog.String(eMsg, err.Error()))
 	} else {
-		msg := "Graceful shutdown finished"
-		slog.Info(msg)
+		slog.Info("Graceful shutdown finished")
 	}
 }
 
@@ -87,8 +84,7 @@ func setupOtel() {
 	var err error
 	otelShutdown = func(context.Context) error { return nil }
 	if strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) == "" {
-		msg := "OTEL_EXPORTER_OTLP_ENDPOINT is not set. OpenTelemetry is disabled."
-		slog.Info(msg)
+		slog.Info("OTEL_EXPORTER_OTLP_ENDPOINT is not set. OpenTelemetry is disabled.")
 		cfg.RunTime.OTelEnabled = false
 		return
 	}
@@ -97,7 +93,7 @@ func setupOtel() {
 	defer stop()
 	otelShutdown, err = setupOTelSDK(ctx)
 	if err != nil {
-		slog.Error("Otel setup went wrong", slog.String(eMsg, err.Error()))
+		slog.Error("OpenTelemetry setup went wrong", slog.String(eMsg, err.Error()))
 		cfg.RunTime.OTelEnabled = false
 		return
 	}
@@ -118,7 +114,8 @@ func initAuth() {
 	var err error
 	authValidator, err = auth.NewValidator(context.Background(), cfg)
 	if err != nil {
-		panic(fmt.Errorf("auth initialization failed: %w", err))
+		slog.Error("Could not configure authentication", slog.String(eMsg, err.Error()))
+		panic(err)
 	}
 }
 
@@ -196,27 +193,23 @@ func RegisterForOsSignals() {
 func createSanitizers() {
 	sani, err := sanitize.New()
 	if err != nil {
-		msg := "Error creating sanitizer"
-		slog.Error(msg, slog.String(eMsg, err.Error()))
+		slog.Error("Error creating sanitizer", slog.String(eMsg, err.Error()))
 		panic(err)
 	}
 	cfg.RunTime.Sani = sani
 }
 
 func startServer() {
-	msg := fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr)
-	slog.Info(msg)
+	slog.Info(fmt.Sprintf("Listening on %v", cfg.RunTime.ListenAddr))
 	cfg.RunTime.StartDate = time.Now().UTC()
 	if cfg.Server.UseTls {
 		if err := server.ListenAndServeTLS(cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
-			msg := "Error while starting https server"
-			slog.Error(msg, slog.String(eMsg, err.Error()))
+			slog.Error("Error while starting https server", slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	} else {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			msg := "Error while starting http server"
-			slog.Error(msg, slog.String(eMsg, err.Error()))
+			slog.Error("Error while starting http server", slog.String(eMsg, err.Error()))
 			panic(err)
 		}
 	}
@@ -227,8 +220,7 @@ func cleanUp() {
 	ctx, cancel = context.WithTimeout(context.Background(), shutdownTime)
 	defer cancel()
 	defer func() {
-		msg := "Cleaning up..."
-		slog.Info(msg)
+		slog.Info("Cleaning up...")
 		if otelShutdown != nil {
 			otelShutdown(ctx)
 		}
