@@ -55,15 +55,17 @@ type tokenHeader struct {
 }
 
 type claims struct {
-	Issuer    string          `json:"iss"`
-	Subject   string          `json:"sub"`
-	Audience  json.RawMessage `json:"aud"`
-	ExpiresAt int64           `json:"exp"`
-	NotBefore int64           `json:"nbf,omitempty"`
-	IssuedAt  int64           `json:"iat,omitempty"`
-	Scope     string          `json:"scope,omitempty"`
-	Scopes    []string        `json:"scopes,omitempty"`
-	TenantID  string          `json:"tenant_id"`
+	Issuer            string          `json:"iss"`
+	Subject           string          `json:"sub"`
+	PreferredUsername string          `json:"preferred_username,omitempty"`
+	Email             string          `json:"email,omitempty"`
+	Audience          json.RawMessage `json:"aud"`
+	ExpiresAt         int64           `json:"exp"`
+	NotBefore         int64           `json:"nbf,omitempty"`
+	IssuedAt          int64           `json:"iat,omitempty"`
+	Scope             string          `json:"scope,omitempty"`
+	Scopes            []string        `json:"scopes,omitempty"`
+	TenantID          string          `json:"tenant_id"`
 }
 
 func NewValidator(ctx context.Context, cfg config.AppConfig) (*Validator, error) {
@@ -181,7 +183,8 @@ func (v *Validator) Validate(token string) (domain.Identity, error) {
 	if c.NotBefore != 0 && c.NotBefore > now {
 		return domain.Identity{}, errors.New("token is not active yet")
 	}
-	if strings.TrimSpace(c.Subject) == "" {
+	subject := claimSubject(c)
+	if subject == "" {
 		return domain.Identity{}, errors.New("token subject is required")
 	}
 	if strings.TrimSpace(c.TenantID) == "" {
@@ -189,7 +192,7 @@ func (v *Validator) Validate(token string) (domain.Identity, error) {
 	}
 
 	return domain.Identity{
-		Subject:  c.Subject,
+		Subject:  subject,
 		TenantID: c.TenantID,
 		Scopes:   claimScopes(c),
 	}, nil
@@ -302,4 +305,14 @@ func claimScopes(c claims) []string {
 		}
 	}
 	return scopes
+}
+
+func claimSubject(c claims) string {
+	if subject := strings.TrimSpace(c.Subject); subject != "" {
+		return subject
+	}
+	if username := strings.TrimSpace(c.PreferredUsername); username != "" {
+		return username
+	}
+	return strings.TrimSpace(c.Email)
 }

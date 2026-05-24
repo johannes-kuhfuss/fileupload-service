@@ -42,6 +42,27 @@ func TestValidatorAcceptsValidToken(t *testing.T) {
 	}
 }
 
+func TestValidatorFallsBackToPreferredUsernameWhenSubjectIsMissing(t *testing.T) {
+	validator, key, issuer, audience := testValidator(t)
+
+	token := signToken(t, key, map[string]any{
+		"iss":                issuer,
+		"aud":                audience,
+		"preferred_username": "developer",
+		"tenant_id":          "tenant-a",
+		"scope":              ScopeUploadCreate,
+		"exp":                time.Now().Add(time.Hour).Unix(),
+	})
+
+	identity, err := validator.Validate(token)
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if identity.Subject != "developer" {
+		t.Fatalf("subject = %q", identity.Subject)
+	}
+}
+
 func TestValidatorRejectsInvalidTokens(t *testing.T) {
 	validator, key, issuer, audience := testValidator(t)
 	valid := map[string]any{
@@ -62,6 +83,16 @@ func TestValidatorRejectsInvalidTokens(t *testing.T) {
 		{name: "expired", claims: cloneClaims(valid, "exp", time.Now().Add(-time.Hour).Unix())},
 		{name: "missing tenant", claims: cloneClaims(valid, "tenant_id", "")},
 		{name: "missing subject", claims: cloneClaims(valid, "sub", "")},
+		{
+			name: "missing subject fallback",
+			claims: map[string]any{
+				"iss":       issuer,
+				"aud":       audience,
+				"tenant_id": "tenant-a",
+				"scope":     ScopeUploadCreate,
+				"exp":       time.Now().Add(time.Hour).Unix(),
+			},
+		},
 	}
 
 	for _, tt := range tests {
