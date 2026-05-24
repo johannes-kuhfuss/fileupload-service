@@ -17,7 +17,7 @@ import (
 type AppConfig struct {
 	Server struct {
 		Host                 string `envconfig:"SERVER_HOST"`
-		Port                 string `envconfig:"SERVER_PORT" default:"8080"`
+		Port                 string `envconfig:"SERVER_PORT" default:"8081"`
 		TlsPort              string `envconfig:"SERVER_TLS_PORT" default:"8443"`
 		GracefulShutdownTime int    `envconfig:"GRACEFUL_SHUTDOWN_TIME" default:"10"`
 		ReadTimeoutSeconds   int    `envconfig:"SERVER_READ_TIMEOUT_SECONDS" default:"1800"`
@@ -67,15 +67,13 @@ var (
 )
 
 func InitConfig(file string, config *AppConfig) error {
-	msg := fmt.Sprintf("Initalizing configuration from file %v...", file)
-	slog.Info(msg)
+	slog.Info(fmt.Sprintf("Initalizing configuration from file %v...", file))
 	loadConfig(file)
 	err := envconfig.Process("", config)
 	if err != nil {
 		return fmt.Errorf("Could not initalize configuration. Check your environment variables. %v", err.Error())
 	}
-	msg = "Configuration initialized"
-	slog.Info(msg)
+	slog.Info("Configuration initialized")
 	return nil
 }
 
