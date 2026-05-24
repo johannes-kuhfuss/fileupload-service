@@ -12,14 +12,14 @@
       "publicClient": true,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://localhost:8080",
-        "http://localhost:8080/*",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:8080/*"
+        "http://localhost:8081",
+        "http://localhost:8081/*",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:8081/*"
       ],
       "webOrigins": [
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
+        "http://localhost:8081",
+        "http://127.0.0.1:8081"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"

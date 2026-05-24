@@ -18,20 +18,20 @@ The service supports a resumable upload API:
 Example resumable flow:
 
 ```bash
-curl -X POST http://localhost:8080/uploads \
+curl -X POST http://localhost:8081/uploads \
   -H "Authorization: Bearer <keycloak-access-token>" \
   -H "Content-Type: application/json" \
   -d '{"file_name":"track.wav","file_size":104857600,"content_type":"audio/wav","checksum":"sha256:<hex-digest>"}'
 
-curl -X PATCH http://localhost:8080/uploads/{upload_id} \
+curl -X PATCH http://localhost:8081/uploads/{upload_id} \
   -H "Authorization: Bearer <keycloak-access-token>" \
   -H "Upload-Offset: 0" \
   --data-binary @chunk-000.bin
 
-curl -i http://localhost:8080/uploads/{upload_id} \
+curl -i http://localhost:8081/uploads/{upload_id} \
   -H "Authorization: Bearer <keycloak-access-token>"
 
-curl -X POST http://localhost:8080/uploads/{upload_id}/complete \
+curl -X POST http://localhost:8081/uploads/{upload_id}/complete \
   -H "Authorization: Bearer <keycloak-access-token>"
 ```
 
@@ -66,7 +66,7 @@ docker build -f Dockerfile.keycloak -t fileupload-keycloak .
 
 docker run --rm \
   --name fileupload-keycloak \
-  -p 8081:8081 \
+  -p 8080:8080 \
   -e KEYCLOAK_ADMIN=admin \
   -e KEYCLOAK_ADMIN_PASSWORD=admin \
   fileupload-keycloak
@@ -80,14 +80,14 @@ The image imports `keycloak/mam-dev-realm.json` with:
 - password: `developer`
 - tenant claim: `tenant_id=tenant-local`
 
-For the embedded UI, open `http://localhost:8080`, click `Login`, and sign in
+For the embedded UI, open `http://localhost:8081`, click `Login`, and sign in
 with `developer` / `developer`. The UI uses the OpenID Connect authorization
 code flow with PKCE and stores tokens in browser session storage.
 
 For API-only testing, get a local access token:
 
 ```bash
-curl -X POST http://localhost:8081/realms/mam-dev/protocol/openid-connect/token \
+curl -X POST http://localhost:8080/realms/mam-dev/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=password" \
   -d "client_id=fileupload-service" \
@@ -111,10 +111,11 @@ event bus.
 - MAX_UPLOAD_BYTES: Optional max accepted file size in bytes. `0` means unlimited.
 - EVENT_OUTBOX_PATH: Optional NDJSON event outbox file. Defaults to `QUARANTINE_PATH/events/upload-events.ndjson`
 - EVENT_SOURCE: Event source name. Defaults to `fileupload-service`
+- SERVER_PORT: HTTP port for the upload service. Defaults to `8081`.
 - SERVER_READ_TIMEOUT_SECONDS: Request body read timeout. Defaults to `1800`.
 - SERVER_WRITE_TIMEOUT_SECONDS: Response write timeout. Defaults to `1800`.
 - SERVER_IDLE_TIMEOUT_SECONDS: Idle connection timeout. Defaults to `120`.
-- AUTH_ISSUER: Required JWT issuer, e.g. `http://localhost:8081/realms/mam-dev`.
+- AUTH_ISSUER: Required JWT issuer, e.g. `http://localhost:8080/realms/mam-dev`.
 - AUTH_AUDIENCE: Required JWT audience, e.g. `fileupload-service`.
-- AUTH_JWKS_URL: Required Keycloak JWKS URL, e.g. `http://localhost:8081/realms/mam-dev/protocol/openid-connect/certs`.
+- AUTH_JWKS_URL: Required Keycloak JWKS URL, e.g. `http://localhost:8080/realms/mam-dev/protocol/openid-connect/certs`.
 - OTEL_EXPORTER_OTLP_ENDPOINT: Optional endpoint to send OTEL data to, e.g. "<http://192.168.1.100:4317/>". If unset, OpenTelemetry is disabled and regular logging is used.
