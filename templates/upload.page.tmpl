@@ -40,7 +40,7 @@
 
     <script>
       const chunkSize = 5 * 1024 * 1024;
-      const uploadScopes = "openid profile email media:upload:create media:upload:write media:upload:read media:upload:complete";
+      const loginScopes = "openid";
       const authConfig = document.getElementById("auth-config").dataset;
       const form = document.getElementById("upload-form");
       const fileInput = document.getElementById("file");
@@ -112,7 +112,7 @@
         const params = new URLSearchParams({
           client_id: clientId,
           response_type: "code",
-          scope: uploadScopes,
+          scope: loginScopes,
           redirect_uri: redirectUri,
           code_challenge: challenge,
           code_challenge_method: "S256",
