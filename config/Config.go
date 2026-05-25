@@ -52,8 +52,21 @@ type AppConfig struct {
 		OTelEnabled bool
 	}
 	Metrics struct {
-		UploadSuccessCounter metric.Int64Counter
-		UploadFailureCounter metric.Int64Counter
+		UploadSuccessCounter    metric.Int64Counter
+		UploadFailureCounter    metric.Int64Counter
+		SessionsStartedCounter  metric.Int64Counter
+		ChunksAcceptedCounter   metric.Int64Counter
+		BytesReceivedCounter    metric.Int64Counter
+		UploadSizeHistogram     metric.Int64Histogram
+		ChunkSizeHistogram      metric.Int64Histogram
+		UploadDurationHistogram metric.Float64Histogram
+		StageDurationHistogram  metric.Float64Histogram
+		OutboxPublishedCounter  metric.Int64Counter
+		OutboxFailureCounter    metric.Int64Counter
+		OutboxPublishDuration   metric.Float64Histogram
+		OutboxFileSizeGauge     metric.Int64ObservableGauge
+		ActiveSessionsGauge     metric.Int64ObservableGauge
+		StaleSessionsGauge      metric.Int64ObservableGauge
 	}
 }
 

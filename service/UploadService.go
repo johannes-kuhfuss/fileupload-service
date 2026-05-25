@@ -18,6 +18,8 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type DefaultUploadService struct {
@@ -30,7 +32,7 @@ func NewUploadService(cfg *config.AppConfig) DefaultUploadService {
 	if outboxPath == "" {
 		outboxPath = filepath.Join(uploadRoot(cfg), "events", "upload-events.ndjson")
 	}
-	publisher := NewOutboxEventPublisher(outboxPath)
+	publisher := NewOutboxEventPublisher(outboxPath, cfg)
 	return DefaultUploadService{
 		Cfg:       cfg,
 		Publisher: &publisher,
@@ -67,22 +69,29 @@ func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain
 		UpdatedAt:      now,
 	}
 
+	persistStart := time.Now()
 	if err := os.MkdirAll(sessionDir(s.Cfg, uploadID), 0o755); err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return domain.UploadSession{}, err
 	}
 	if err := os.MkdirAll(filepath.Dir(absoluteQuarantinePath(s.Cfg, session)), 0o755); err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return domain.UploadSession{}, err
 	}
 	f, err := os.OpenFile(absoluteQuarantinePath(s.Cfg, session), os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return domain.UploadSession{}, err
 	}
 	if err := f.Close(); err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return domain.UploadSession{}, err
 	}
 	if err := persistSession(s.Cfg, session); err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return domain.UploadSession{}, err
 	}
+	s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 	return session, nil
 }
 
@@ -132,9 +141,12 @@ func (s DefaultUploadService) WriteChunk(uploadID string, offset int64, body io.
 
 	session.BytesReceived += written
 	session.UpdatedAt = time.Now().UTC()
+	persistStart := time.Now()
 	if err := persistSession(s.Cfg, session); err != nil {
+		s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 		return session.BytesReceived, err
 	}
+	s.recordStageDuration(context.Background(), "persist_metadata", persistStart)
 	return session.BytesReceived, nil
 }
 
@@ -144,28 +156,41 @@ func (s DefaultUploadService) CompleteSession(ctx context.Context, uploadID stri
 		return domain.UploadSession{}, err
 	}
 	if session.BytesReceived != session.FileSize {
+		s.recordUploadDuration(ctx, session, "failed")
 		return domain.UploadSession{}, fmt.Errorf("upload %s is incomplete: received %d of %d bytes", uploadID, session.BytesReceived, session.FileSize)
 	}
 
+	checksumStart := time.Now()
 	computedChecksum, err := fileSHA256(absoluteQuarantinePath(s.Cfg, session))
+	s.recordStageDuration(ctx, "checksum", checksumStart)
 	if err != nil {
+		s.recordUploadDuration(ctx, session, "failed")
 		return domain.UploadSession{}, err
 	}
 	session.ComputedChecksum = computedChecksum
 	if session.Checksum != computedChecksum {
 		session.Status = domain.UploadStatusChecksumFailed
 		session.UpdatedAt = time.Now().UTC()
+		persistStart := time.Now()
 		if err := persistSession(s.Cfg, session); err != nil {
+			s.recordStageDuration(ctx, "persist_metadata", persistStart)
+			s.recordUploadDuration(ctx, session, "failed")
 			return domain.UploadSession{}, err
 		}
+		s.recordStageDuration(ctx, "persist_metadata", persistStart)
+		s.recordUploadDuration(ctx, session, "failed")
 		return domain.UploadSession{}, fmt.Errorf("checksum mismatch: client %s server %s", session.Checksum, computedChecksum)
 	}
 
 	session.Status = domain.UploadStatusQuarantined
 	session.UpdatedAt = time.Now().UTC()
+	persistStart := time.Now()
 	if err := persistSession(s.Cfg, session); err != nil {
+		s.recordStageDuration(ctx, "persist_metadata", persistStart)
+		s.recordUploadDuration(ctx, session, "failed")
 		return domain.UploadSession{}, err
 	}
+	s.recordStageDuration(ctx, "persist_metadata", persistStart)
 
 	event := domain.UploadEvent{
 		EventID:        uuid.New().String(),
@@ -180,9 +205,42 @@ func (s DefaultUploadService) CompleteSession(ctx context.Context, uploadID stri
 		QuarantinePath: session.QuarantinePath,
 	}
 	if err := s.Publisher.PublishUploadQuarantined(ctx, event); err != nil {
+		s.recordUploadDuration(ctx, session, "failed")
 		return domain.UploadSession{}, err
 	}
 	return session, nil
+}
+
+func (s DefaultUploadService) recordStageDuration(ctx context.Context, stage string, start time.Time) {
+	if s.Cfg != nil && s.Cfg.Metrics.StageDurationHistogram != nil {
+		s.Cfg.Metrics.StageDurationHistogram.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attribute.String("stage", stage)))
+	}
+}
+
+func (s DefaultUploadService) recordUploadDuration(ctx context.Context, session domain.UploadSession, result string) {
+	if s.Cfg != nil && s.Cfg.Metrics.UploadDurationHistogram != nil {
+		attrs := []attribute.KeyValue{
+			attribute.String("result", result),
+			attribute.String("content_type", contentTypeMetricValue(session.ContentType)),
+			attribute.String("extension", extensionMetricValue(session.FileName)),
+		}
+		s.Cfg.Metrics.UploadDurationHistogram.Record(ctx, time.Since(session.CreatedAt).Seconds(), metric.WithAttributes(attrs...))
+	}
+}
+
+func contentTypeMetricValue(contentType string) string {
+	if contentType == "" {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+}
+
+func extensionMetricValue(fileName string) string {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if extension == "" {
+		return "unknown"
+	}
+	return extension
 }
 
 func sanitizeFileName(fileName string) string {
