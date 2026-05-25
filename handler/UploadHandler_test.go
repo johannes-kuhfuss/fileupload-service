@@ -18,6 +18,7 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
 	"github.com/johannes-kuhfuss/fileupload-service/service"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func TestCreateUploadEndpoint(t *testing.T) {
@@ -190,6 +191,7 @@ func testRouter(t *testing.T) (*gin.Engine, config.AppConfig) {
 	cfg.Upload.AllowedExtensions = []string{".wav", ".mp3", ".m4a"}
 	cfg.Events.Source = "test"
 	cfg.Events.OutboxPath = filepath.Join(root, "events", "upload-events.ndjson")
+	installNoopMetrics(&cfg)
 
 	svc := service.NewUploadService(&cfg)
 	handler := NewUploadHandler(&cfg, svc)
@@ -231,4 +233,17 @@ func performRequest(router *gin.Engine, method, target, contentType string, body
 
 func checksum(value string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
+}
+
+func installNoopMetrics(cfg *config.AppConfig) {
+	meter := noop.NewMeterProvider().Meter("test")
+	cfg.Metrics.UploadSuccessCounter, _ = meter.Int64Counter("test.uploads.completed")
+	cfg.Metrics.UploadFailureCounter, _ = meter.Int64Counter("test.uploads.failed")
+	cfg.Metrics.SessionsStartedCounter, _ = meter.Int64Counter("test.sessions.started")
+	cfg.Metrics.ChunksAcceptedCounter, _ = meter.Int64Counter("test.chunks.accepted")
+	cfg.Metrics.BytesReceivedCounter, _ = meter.Int64Counter("test.bytes.received")
+	cfg.Metrics.UploadSizeHistogram, _ = meter.Int64Histogram("test.upload.size")
+	cfg.Metrics.ChunkSizeHistogram, _ = meter.Int64Histogram("test.chunk.size")
+	cfg.Metrics.UploadDurationHistogram, _ = meter.Float64Histogram("test.upload.duration")
+	cfg.Metrics.StageDurationHistogram, _ = meter.Float64Histogram("test.stage.duration")
 }

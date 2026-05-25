@@ -15,6 +15,7 @@ import (
 	"github.com/johannes-kuhfuss/fileupload-service/config"
 	"github.com/johannes-kuhfuss/fileupload-service/domain"
 	"github.com/johannes-kuhfuss/fileupload-service/dto"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 type recordingPublisher struct {
@@ -419,6 +420,41 @@ func TestZeroByteUploadCompletesWithChecksum(t *testing.T) {
 	}
 }
 
+func TestUploadServiceRecordsMetricsWhenConfigured(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	installNoopMetrics(&cfg)
+	svc := NewUploadService(&cfg)
+
+	session, err := svc.CreateSession(dto.CreateUploadRequest{
+		FileName:    "TRACK.WAV",
+		FileSize:    5,
+		ContentType: "Audio/WAV; charset=utf-8",
+		Checksum:    checksum("hello"),
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if _, err := svc.WriteChunk(session.UploadID, 0, strings.NewReader("hello")); err != nil {
+		t.Fatalf("WriteChunk() error = %v", err)
+	}
+	if _, err := svc.CompleteSession(context.Background(), session.UploadID); err != nil {
+		t.Fatalf("CompleteSession() error = %v", err)
+	}
+
+	if got := contentTypeMetricValue("Audio/WAV; charset=utf-8"); got != "audio/wav" {
+		t.Fatalf("contentTypeMetricValue() = %q, want audio/wav", got)
+	}
+	if got := contentTypeMetricValue(""); got != "unknown" {
+		t.Fatalf("contentTypeMetricValue(empty) = %q, want unknown", got)
+	}
+	if got := extensionMetricValue("TRACK.WAV"); got != ".wav" {
+		t.Fatalf("extensionMetricValue() = %q, want .wav", got)
+	}
+	if got := extensionMetricValue("README"); got != "unknown" {
+		t.Fatalf("extensionMetricValue(no extension) = %q, want unknown", got)
+	}
+}
+
 func TestGetAndCompleteRejectUnknownUpload(t *testing.T) {
 	cfg := testConfig(t.TempDir())
 	svc := NewUploadService(&cfg)
@@ -511,6 +547,29 @@ func TestOutboxEventPublisherWritesJSONLines(t *testing.T) {
 	}
 }
 
+func TestOutboxEventPublisherRecordsMetricsForNoopAndFailure(t *testing.T) {
+	cfg := testConfig(t.TempDir())
+	installNoopMetrics(&cfg)
+	event := domain.UploadEvent{
+		EventID: "event-1",
+		Type:    "media.asset.uploaded.quarantined",
+	}
+
+	noopPublisher := NewOutboxEventPublisher("", &cfg)
+	if err := noopPublisher.PublishUploadQuarantined(context.Background(), event); err != nil {
+		t.Fatalf("PublishUploadQuarantined(empty path) error = %v", err)
+	}
+
+	filePath := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(filePath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	failingPublisher := NewOutboxEventPublisher(filepath.Join(filePath, "outbox.ndjson"), &cfg)
+	if err := failingPublisher.PublishUploadQuarantined(context.Background(), event); err == nil {
+		t.Fatal("PublishUploadQuarantined() expected mkdir failure")
+	}
+}
+
 func testConfig(root string) config.AppConfig {
 	var cfg config.AppConfig
 	cfg.Upload.UploadPath = root
@@ -522,4 +581,13 @@ func testConfig(root string) config.AppConfig {
 
 func checksum(value string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
+}
+
+func installNoopMetrics(cfg *config.AppConfig) {
+	meter := noop.NewMeterProvider().Meter("test")
+	cfg.Metrics.StageDurationHistogram, _ = meter.Float64Histogram("test.stage.duration")
+	cfg.Metrics.UploadDurationHistogram, _ = meter.Float64Histogram("test.upload.duration")
+	cfg.Metrics.OutboxPublishedCounter, _ = meter.Int64Counter("test.outbox.published")
+	cfg.Metrics.OutboxFailureCounter, _ = meter.Int64Counter("test.outbox.failures")
+	cfg.Metrics.OutboxPublishDuration, _ = meter.Float64Histogram("test.outbox.duration")
 }
