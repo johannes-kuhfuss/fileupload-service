@@ -7,14 +7,6 @@
             <div class="col col-lg-8">
                 <h1>Media Upload</h1>
                 <h2>Select file to upload</h2>
-                <div id="auth-config"
-                     data-issuer="{{ .authIssuer }}"
-                     data-client-id="{{ .authClientID }}"></div>
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <button type="button" id="login" class="btn btn-outline-primary">Login</button>
-                    <button type="button" id="logout" class="btn btn-outline-secondary">Logout</button>
-                    <span id="auth-status" class="text-muted">Not logged in</span>
-                </div>
                 <form id="upload-form" action="" method="POST" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label for="file" class="form-label">Choose a file</label>
@@ -40,22 +32,11 @@
 
     <script>
       const chunkSize = 5 * 1024 * 1024;
-      const loginScopes = "openid profile email";
-      const authConfig = document.getElementById("auth-config").dataset;
       const form = document.getElementById("upload-form");
       const fileInput = document.getElementById("file");
-      const loginButton = document.getElementById("login");
-      const logoutButton = document.getElementById("logout");
       const uploadButton = document.getElementById("upload");
-      const authStatus = document.getElementById("auth-status");
       const statusField = document.getElementById("status");
       const progressBar = document.getElementById("progress-bar");
-
-      loginButton.addEventListener("click", startLogin);
-      logoutButton.addEventListener("click", logout);
-      handleLoginRedirect()
-        .catch((error) => setStatus(`Login error: ${error.message}`))
-        .finally(updateAuthState);
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -71,22 +52,21 @@
         setStatus("Calculating checksum...");
 
         try {
-          const token = await getAccessToken();
           const checksum = await calculateChecksum(file);
           setStatus("Preparing upload...");
 
-          const session = await getOrCreateUploadSession(file, checksum, token);
+          const session = await getOrCreateUploadSession(file, checksum);
           let offset = session.bytes_received || 0;
           setProgress(percent(offset, file.size));
 
           while (offset < file.size) {
             const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
-            offset = await uploadChunk(session.upload_id, offset, chunk, token);
+            offset = await uploadChunk(session.upload_id, offset, chunk);
             setProgress(percent(offset, file.size));
             setStatus(`Uploading ${formatBytes(offset)} of ${formatBytes(file.size)}...`);
           }
 
-          const completed = await completeUpload(session.upload_id, token);
+          const completed = await completeUpload(session.upload_id);
           clearSavedSession(file);
           setProgress(100);
           setStatus(`Upload completed: ${completed.quarantine_path}`);
@@ -97,210 +77,10 @@
         }
       });
 
-      async function startLogin() {
-        const issuer = oidcIssuer();
-        const clientId = oidcClientId();
-        const redirectUri = currentRedirectUri();
-        const state = randomUrlSafe(32);
-        const verifier = randomUrlSafe(64);
-        const challenge = await codeChallenge(verifier);
-
-        sessionStorage.setItem("fileupload:pkce-state", state);
-        sessionStorage.setItem("fileupload:pkce-verifier", verifier);
-        sessionStorage.setItem("fileupload:pkce-redirect-uri", redirectUri);
-
-        const params = new URLSearchParams({
-          client_id: clientId,
-          response_type: "code",
-          scope: loginScopes,
-          redirect_uri: redirectUri,
-          code_challenge: challenge,
-          code_challenge_method: "S256",
-          state: state,
-        });
-
-        window.location.assign(`${issuer}/protocol/openid-connect/auth?${params.toString()}`);
-      }
-
-      async function handleLoginRedirect() {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get("code");
-        const returnedState = params.get("state");
-        if (!code) {
-          return;
-        }
-
-        const expectedState = sessionStorage.getItem("fileupload:pkce-state");
-        const verifier = sessionStorage.getItem("fileupload:pkce-verifier");
-        const redirectUri = sessionStorage.getItem("fileupload:pkce-redirect-uri") || currentRedirectUri();
-        clearPkceState();
-
-        if (!expectedState || returnedState !== expectedState) {
-          throw new Error("OIDC state mismatch.");
-        }
-        if (!verifier) {
-          throw new Error("Missing PKCE verifier.");
-        }
-
-        const tokenSet = await tokenRequest({
-          grant_type: "authorization_code",
-          client_id: oidcClientId(),
-          code: code,
-          redirect_uri: redirectUri,
-          code_verifier: verifier,
-        });
-        saveTokenSet(tokenSet);
-
-        params.delete("code");
-        params.delete("state");
-        params.delete("session_state");
-        const cleanUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`;
-        window.history.replaceState({}, document.title, cleanUrl);
-      }
-
-      async function getAccessToken() {
-        const tokenSet = loadTokenSet();
-        if (!tokenSet?.access_token) {
-          throw new Error("Log in before uploading.");
-        }
-        if (!isExpired(tokenSet)) {
-          return tokenSet.access_token;
-        }
-        if (!tokenSet.refresh_token) {
-          clearTokenSet();
-          throw new Error("Login expired. Log in again.");
-        }
-
-        try {
-          const refreshed = await tokenRequest({
-            grant_type: "refresh_token",
-            client_id: oidcClientId(),
-            refresh_token: tokenSet.refresh_token,
-          });
-          saveTokenSet(refreshed);
-          return refreshed.access_token;
-        } catch (error) {
-          clearTokenSet();
-          throw new Error(`Login expired. ${error.message}`);
-        }
-      }
-
-      async function tokenRequest(values) {
-        const response = await fetch(`${oidcIssuer()}/protocol/openid-connect/token`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams(values),
-        });
-
-        if (!response.ok) {
-          throw new Error(await errorMessage(response));
-        }
-
-        return response.json();
-      }
-
-      function saveTokenSet(tokenSet) {
-        const now = Math.floor(Date.now() / 1000);
-        sessionStorage.setItem("fileupload:token-set", JSON.stringify({
-          access_token: tokenSet.access_token,
-          refresh_token: tokenSet.refresh_token,
-          expires_at: now + Number(tokenSet.expires_in || 0),
-        }));
-      }
-
-      function loadTokenSet() {
-        const raw = sessionStorage.getItem("fileupload:token-set");
-        if (!raw) {
-          return null;
-        }
-
-        try {
-          return JSON.parse(raw);
-        } catch {
-          clearTokenSet();
-          return null;
-        }
-      }
-
-      function clearTokenSet() {
-        sessionStorage.removeItem("fileupload:token-set");
-        updateAuthState();
-      }
-
-      function clearPkceState() {
-        sessionStorage.removeItem("fileupload:pkce-state");
-        sessionStorage.removeItem("fileupload:pkce-verifier");
-        sessionStorage.removeItem("fileupload:pkce-redirect-uri");
-      }
-
-      function logout() {
-        clearPkceState();
-        clearTokenSet();
-        setStatus("Logged out.");
-      }
-
-      function updateAuthState() {
-        const tokenSet = loadTokenSet();
-        const loggedIn = Boolean(tokenSet?.access_token) && !isExpired(tokenSet);
-        authStatus.textContent = loggedIn ? "Logged in" : "Not logged in";
-        loginButton.disabled = loggedIn;
-        logoutButton.disabled = !loggedIn;
-      }
-
-      function isExpired(tokenSet) {
-        const expiresAt = Number(tokenSet.expires_at || 0);
-        return expiresAt <= Math.floor(Date.now() / 1000) + 30;
-      }
-
-      function oidcIssuer() {
-        const issuer = authConfig.issuer?.replace(/\/+$/, "");
-        if (!issuer) {
-          throw new Error("AUTH_ISSUER is not configured.");
-        }
-        return issuer;
-      }
-
-      function oidcClientId() {
-        if (!authConfig.clientId) {
-          throw new Error("AUTH_AUDIENCE is not configured.");
-        }
-        return authConfig.clientId;
-      }
-
-      function currentRedirectUri() {
-        return `${window.location.origin}${window.location.pathname}`;
-      }
-
-      async function codeChallenge(verifier) {
-        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-        return base64UrlEncode(new Uint8Array(digest));
-      }
-
-      function randomUrlSafe(byteCount) {
-        const bytes = new Uint8Array(byteCount);
-        crypto.getRandomValues(bytes);
-        return base64UrlEncode(bytes);
-      }
-
-      function base64UrlEncode(bytes) {
-        let binary = "";
-        for (const byte of bytes) {
-          binary += String.fromCharCode(byte);
-        }
-        return btoa(binary)
-          .replace(/\+/g, "-")
-          .replace(/\//g, "_")
-          .replace(/=+$/, "");
-      }
-
-      async function getOrCreateUploadSession(file, checksum, token) {
+      async function getOrCreateUploadSession(file, checksum) {
         const saved = loadSavedSession(file);
         if (saved?.upload_id && saved.checksum === checksum) {
-          const response = await fetch(`/uploads/${saved.upload_id}`, {
-            headers: authHeaders(token),
-          });
+          const response = await fetch(`/uploads/${saved.upload_id}`);
           if (response.ok) {
             const session = await response.json();
             if (session.status === "receiving") {
@@ -314,7 +94,6 @@
         const response = await fetch("/uploads", {
           method: "POST",
           headers: {
-            ...authHeaders(token),
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -334,11 +113,10 @@
         return session;
       }
 
-      async function uploadChunk(uploadId, offset, chunk, token) {
+      async function uploadChunk(uploadId, offset, chunk) {
         const response = await fetch(`/uploads/${uploadId}`, {
           method: "PATCH",
           headers: {
-            ...authHeaders(token),
             "Content-Type": "application/octet-stream",
             "Upload-Offset": String(offset),
           },
@@ -352,10 +130,9 @@
         return Number(response.headers.get("Upload-Offset"));
       }
 
-      async function completeUpload(uploadId, token) {
+      async function completeUpload(uploadId) {
         const response = await fetch(`/uploads/${uploadId}/complete`, {
           method: "POST",
-          headers: authHeaders(token),
         });
 
         if (!response.ok) {
@@ -392,12 +169,6 @@
 
       function sessionKey(file) {
         return `fileupload:${file.name}:${file.size}:${file.lastModified}`;
-      }
-
-      function authHeaders(token) {
-        return {
-          "Authorization": `Bearer ${token}`,
-        };
       }
 
       async function errorMessage(response) {

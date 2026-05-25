@@ -37,10 +37,7 @@ func NewUploadService(cfg *config.AppConfig) DefaultUploadService {
 	}
 }
 
-func (s DefaultUploadService) CreateSession(identity domain.Identity, req dto.CreateUploadRequest) (domain.UploadSession, error) {
-	if err := validateIdentity(identity); err != nil {
-		return domain.UploadSession{}, err
-	}
+func (s DefaultUploadService) CreateSession(req dto.CreateUploadRequest) (domain.UploadSession, error) {
 	fileName := sanitizeFileName(req.FileName)
 	if fileName == "" {
 		return domain.UploadSession{}, errors.New("file_name is required")
@@ -60,19 +57,17 @@ func (s DefaultUploadService) CreateSession(identity domain.Identity, req dto.Cr
 	uploadID := uuid.New().String()
 	session := domain.UploadSession{
 		UploadID:       uploadID,
-		TenantID:       identity.TenantID,
-		CreatedBy:      identity.Subject,
 		FileName:       fileName,
 		FileSize:       req.FileSize,
 		ContentType:    req.ContentType,
 		Checksum:       checksum,
 		Status:         domain.UploadStatusReceiving,
-		QuarantinePath: filepath.Join(identity.TenantID, uploadID, fileName),
+		QuarantinePath: filepath.Join(uploadID, fileName),
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
 
-	if err := os.MkdirAll(sessionDir(s.Cfg, identity.TenantID, uploadID), 0o755); err != nil {
+	if err := os.MkdirAll(sessionDir(s.Cfg, uploadID), 0o755); err != nil {
 		return domain.UploadSession{}, err
 	}
 	if err := os.MkdirAll(filepath.Dir(absoluteQuarantinePath(s.Cfg, session)), 0o755); err != nil {
@@ -91,22 +86,13 @@ func (s DefaultUploadService) CreateSession(identity domain.Identity, req dto.Cr
 	return session, nil
 }
 
-func (s DefaultUploadService) GetSession(identity domain.Identity, uploadID string) (domain.UploadSession, error) {
-	if err := validateIdentity(identity); err != nil {
-		return domain.UploadSession{}, err
-	}
-	return readSession(s.Cfg, identity.TenantID, uploadID)
+func (s DefaultUploadService) GetSession(uploadID string) (domain.UploadSession, error) {
+	return readSession(s.Cfg, uploadID)
 }
 
-func (s DefaultUploadService) WriteChunk(identity domain.Identity, uploadID string, offset int64, body io.Reader) (int64, error) {
-	if err := validateIdentity(identity); err != nil {
-		return 0, err
-	}
-	session, err := readSession(s.Cfg, identity.TenantID, uploadID)
+func (s DefaultUploadService) WriteChunk(uploadID string, offset int64, body io.Reader) (int64, error) {
+	session, err := readSession(s.Cfg, uploadID)
 	if err != nil {
-		return 0, err
-	}
-	if err := authorizeTenant(identity, session); err != nil {
 		return 0, err
 	}
 	if session.Status != domain.UploadStatusReceiving {
@@ -152,15 +138,9 @@ func (s DefaultUploadService) WriteChunk(identity domain.Identity, uploadID stri
 	return session.BytesReceived, nil
 }
 
-func (s DefaultUploadService) CompleteSession(ctx context.Context, identity domain.Identity, uploadID string) (domain.UploadSession, error) {
-	if err := validateIdentity(identity); err != nil {
-		return domain.UploadSession{}, err
-	}
-	session, err := readSession(s.Cfg, identity.TenantID, uploadID)
+func (s DefaultUploadService) CompleteSession(ctx context.Context, uploadID string) (domain.UploadSession, error) {
+	session, err := readSession(s.Cfg, uploadID)
 	if err != nil {
-		return domain.UploadSession{}, err
-	}
-	if err := authorizeTenant(identity, session); err != nil {
 		return domain.UploadSession{}, err
 	}
 	if session.BytesReceived != session.FileSize {
@@ -193,8 +173,6 @@ func (s DefaultUploadService) CompleteSession(ctx context.Context, identity doma
 		Source:         s.Cfg.Events.Source,
 		OccurredAt:     time.Now().UTC(),
 		UploadID:       session.UploadID,
-		TenantID:       session.TenantID,
-		ActorID:        session.CreatedBy,
 		FileName:       session.FileName,
 		FileSize:       session.FileSize,
 		ContentType:    session.ContentType,
@@ -228,12 +206,12 @@ func uploadRoot(cfg *config.AppConfig) string {
 	return filepath.Join(cfg.Upload.UploadPath, "quarantine")
 }
 
-func sessionDir(cfg *config.AppConfig, tenantID, uploadID string) string {
-	return filepath.Join(uploadRoot(cfg), "_sessions", tenantID, uploadID)
+func sessionDir(cfg *config.AppConfig, uploadID string) string {
+	return filepath.Join(uploadRoot(cfg), "_sessions", uploadID)
 }
 
-func sessionPath(cfg *config.AppConfig, tenantID, uploadID string) string {
-	return filepath.Join(sessionDir(cfg, tenantID, uploadID), "metadata.json")
+func sessionPath(cfg *config.AppConfig, uploadID string) string {
+	return filepath.Join(sessionDir(cfg, uploadID), "metadata.json")
 }
 
 func absoluteQuarantinePath(cfg *config.AppConfig, session domain.UploadSession) string {
@@ -241,10 +219,10 @@ func absoluteQuarantinePath(cfg *config.AppConfig, session domain.UploadSession)
 }
 
 func persistSession(cfg *config.AppConfig, session domain.UploadSession) error {
-	if err := os.MkdirAll(sessionDir(cfg, session.TenantID, session.UploadID), 0o755); err != nil {
+	if err := os.MkdirAll(sessionDir(cfg, session.UploadID), 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(sessionPath(cfg, session.TenantID, session.UploadID))
+	f, err := os.Create(sessionPath(cfg, session.UploadID))
 	if err != nil {
 		return err
 	}
@@ -254,14 +232,11 @@ func persistSession(cfg *config.AppConfig, session domain.UploadSession) error {
 	return enc.Encode(session)
 }
 
-func readSession(cfg *config.AppConfig, tenantID, uploadID string) (domain.UploadSession, error) {
-	if err := validateTenantID(tenantID); err != nil {
-		return domain.UploadSession{}, err
-	}
+func readSession(cfg *config.AppConfig, uploadID string) (domain.UploadSession, error) {
 	if _, err := uuid.Parse(uploadID); err != nil {
 		return domain.UploadSession{}, fmt.Errorf("invalid upload_id: %w", err)
 	}
-	f, err := os.Open(sessionPath(cfg, tenantID, uploadID))
+	f, err := os.Open(sessionPath(cfg, uploadID))
 	if err != nil {
 		return domain.UploadSession{}, err
 	}
@@ -270,9 +245,6 @@ func readSession(cfg *config.AppConfig, tenantID, uploadID string) (domain.Uploa
 	var session domain.UploadSession
 	if err := json.NewDecoder(f).Decode(&session); err != nil {
 		return domain.UploadSession{}, err
-	}
-	if session.TenantID != tenantID {
-		return domain.UploadSession{}, errors.New("upload belongs to a different tenant")
 	}
 	return session, nil
 }
@@ -314,34 +286,4 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil
-}
-
-func validateIdentity(identity domain.Identity) error {
-	if strings.TrimSpace(identity.Subject) == "" {
-		return errors.New("identity subject is required")
-	}
-	return validateTenantID(identity.TenantID)
-}
-
-func validateTenantID(tenantID string) error {
-	if strings.TrimSpace(tenantID) == "" {
-		return errors.New("tenant_id is required")
-	}
-	for _, r := range tenantID {
-		if (r >= 'a' && r <= 'z') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') ||
-			r == '-' || r == '_' || r == '.' {
-			continue
-		}
-		return errors.New("tenant_id contains unsupported characters")
-	}
-	return nil
-}
-
-func authorizeTenant(identity domain.Identity, session domain.UploadSession) error {
-	if session.TenantID != identity.TenantID {
-		return errors.New("upload belongs to a different tenant")
-	}
-	return nil
 }

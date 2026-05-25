@@ -9,7 +9,6 @@ type CreateUploadRequest struct {
 
 type UploadSessionResponse struct {
 	UploadID         string `json:"upload_id"`
-	TenantID         string `json:"tenant_id"`
 	FileName         string `json:"file_name"`
 	FileSize         int64  `json:"file_size"`
 	BytesReceived    int64  `json:"bytes_received"`
@@ -21,7 +20,6 @@ type UploadSessionResponse struct {
 
 type CompleteUploadResponse struct {
 	UploadID         string `json:"upload_id"`
-	TenantID         string `json:"tenant_id"`
 	FileName         string `json:"file_name"`
 	FileSize         int64  `json:"file_size"`
 	BytesReceived    int64  `json:"bytes_received"`

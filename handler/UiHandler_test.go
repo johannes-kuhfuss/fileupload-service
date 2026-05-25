@@ -16,8 +16,6 @@ func TestUiHandlerPagesRender(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var cfg config.AppConfig
-	cfg.Auth.Issuer = "http://localhost:8080/realms/mam-dev"
-	cfg.Auth.Audience = "fileupload-service"
 	cfg.RunTime.UploadList = []domain.Upload{
 		{
 			UploadDate:  "2026-05-23 09:00:00",
@@ -44,8 +42,8 @@ func TestUiHandlerPagesRender(t *testing.T) {
 		{
 			name:        "upload",
 			path:        "/",
-			contains:    []string{"Media Upload", "startLogin", "code_challenge_method", "calculateChecksum", "/uploads", "http://localhost:8080/realms/mam-dev", "fileupload-service"},
-			notContains: []string{"access-token", "Paste a Keycloak access token"},
+			contains:    []string{"Media Upload", "calculateChecksum", "/uploads"},
+			notContains: []string{"access-token", "startLogin", "code_challenge_method"},
 		},
 		{name: "files", path: "/files", contains: []string{"Files uploaded", "track.wav", "quarantined"}},
 		{name: "about", path: "/about", contains: []string{"About"}},
