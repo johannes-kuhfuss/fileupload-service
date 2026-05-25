@@ -5,3 +5,6 @@ Important next production steps:
 - database-backed sessions if you run multiple replicas
 - malware scanning workflow (extra service, triggered by event)
 - object storage support for very large media files.
+
+
+https://medium.com/@rizkysr90/getting-started-with-oauth-2-0-in-golang-using-keycloak-8e61fdf3620b
