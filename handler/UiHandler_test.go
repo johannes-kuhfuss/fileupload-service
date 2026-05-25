@@ -30,7 +30,6 @@ func TestUiHandlerPagesRender(t *testing.T) {
 	router := gin.New()
 	router.LoadHTMLGlob(filepath.Join("..", "templates", "*.tmpl"))
 	router.GET("/", ui.UploadPage)
-	router.GET("/files", ui.UploadListPage)
 	router.GET("/about", ui.AboutPage)
 
 	tests := []struct {
@@ -45,7 +44,6 @@ func TestUiHandlerPagesRender(t *testing.T) {
 			contains:    []string{"Media Upload", "calculateChecksum", "/uploads"},
 			notContains: []string{"access-token", "startLogin", "code_challenge_method"},
 		},
-		{name: "files", path: "/files", contains: []string{"Files uploaded", "track.wav", "quarantined"}},
 		{name: "about", path: "/about", contains: []string{"About"}},
 	}
 

@@ -30,11 +30,3 @@ func (uh *UiHandler) UploadPage(c *gin.Context) {
 		"data":  nil,
 	})
 }
-
-func (uh *UiHandler) UploadListPage(c *gin.Context) {
-	files := uh.Cfg.RunTime.UploadList
-	c.HTML(http.StatusOK, "uploadlist.page.tmpl", gin.H{
-		"title": "Upload List",
-		"data":  files,
-	})
-}

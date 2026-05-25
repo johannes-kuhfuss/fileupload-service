@@ -107,7 +107,6 @@ func TestInitRouterAndMapUrls(t *testing.T) {
 		http.MethodPatch + " /uploads/:uploadID",
 		http.MethodPost + " /uploads/:uploadID/complete",
 		http.MethodGet + " /",
-		http.MethodGet + " /files",
 		http.MethodGet + " /about",
 	}
 	for _, route := range expectedRoutes {

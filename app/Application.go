@@ -169,7 +169,6 @@ func mapUrls() {
 	cfg.RunTime.Router.PATCH("/uploads/:uploadID", uploadHandler.UploadChunk)
 	cfg.RunTime.Router.POST("/uploads/:uploadID/complete", uploadHandler.CompleteUpload)
 	cfg.RunTime.Router.GET("/", uiHandler.UploadPage)
-	cfg.RunTime.Router.GET("/files", uiHandler.UploadListPage)
 	cfg.RunTime.Router.GET("/about", uiHandler.AboutPage)
 }
 
